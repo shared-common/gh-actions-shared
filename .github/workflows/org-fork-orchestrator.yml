@@ -52,6 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+      max-parallel: 1
     runs-on: ubuntu-24.04
     permissions:
       contents: read
