@@ -285,11 +285,11 @@ jobs:
           REPO_META_CACHE_PATH: ${{ github.workspace }}/.cache/repo-metadata.json
           REPO_CACHE_TTL_DISCOVERY: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY ||
-            '86400' }}
-          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META }}
-          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE }}
-          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ }}
-          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH }}
+            '3600' }}
+          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META || '800' }}
+          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
+          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
+          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
           GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_PEM.pem
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
@@ -320,11 +320,11 @@ jobs:
           REPO_META_CACHE_PATH: ${{ github.workspace }}/.cache/repo-metadata.json
           REPO_CACHE_TTL_DISCOVERY: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY ||
-            '86400' }}
-          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META }}
-          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE }}
-          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ }}
-          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH }}
+            '3600' }}
+          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META || '800' }}
+          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
+          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
+          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
           GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING

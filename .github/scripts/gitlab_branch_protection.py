@@ -340,10 +340,19 @@ def main() -> int:
     repos = discover_fork_repos(api, cfg.github_org, repo_filter)
     cache_path = os.environ.get("REPO_META_CACHE_PATH") or os.environ.get("REPO_CACHE_PATH")
     cache = load_cache(cache_path) if cache_path else {"version": 1, "orgs": {}}
-    ttl_meta = int(os.environ.get("REPO_CACHE_TTL_META", "800"))
-    ttl_negative = int(os.environ.get("REPO_CACHE_TTL_NEGATIVE", "3600"))
-    ttl_gitlab_project = int(os.environ.get("REPO_CACHE_TTL_GITLAB_PROJ", "3600"))
-    ttl_gitlab_branch = int(os.environ.get("REPO_CACHE_TTL_GITLAB_BRANCH", "3600"))
+    def _ttl(name: str, default: int) -> int:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            return default
+
+    ttl_meta = _ttl("REPO_CACHE_TTL_META", 800)
+    ttl_negative = _ttl("REPO_CACHE_TTL_NEGATIVE", 1800)
+    ttl_gitlab_project = _ttl("REPO_CACHE_TTL_GITLAB_PROJ", 21600)
+    ttl_gitlab_branch = _ttl("REPO_CACHE_TTL_GITLAB_BRANCH", 900)
 
     results: List[Dict[str, Any]] = []
     for repo in repos:
