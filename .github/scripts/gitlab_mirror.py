@@ -20,6 +20,20 @@ from secret_env import (
     read_required_secret_file,
     read_required_value,
 )
+from repo_metadata_cache import (
+    get_gitlab_branch,
+    get_gitlab_project,
+    get_ref_sha,
+    get_repo_meta,
+    is_negative,
+    load_cache,
+    save_cache,
+    set_gitlab_branch,
+    set_gitlab_project,
+    set_negative,
+    set_ref_sha,
+    set_repo_meta,
+)
 
 
 @dataclass(frozen=True)
@@ -376,26 +390,47 @@ def _push_ref(repo_dir: str, remote: str, sha: str, target_ref: str) -> None:
     _run_git(["push", remote, f"{sha}:refs/heads/{target_ref}"], cwd=repo_dir)
 
 
-def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dict[str, Any]:
+def process_repo(
+    api: GitHubApi,
+    cfg: GitLabConfig,
+    repo: Dict[str, Any],
+    cache: Dict[str, Any],
+    ttl_meta: int,
+    ttl_negative: int,
+    ttl_gitlab_project: int,
+    ttl_gitlab_branch: int,
+) -> Dict[str, Any]:
     owner = cfg.github_org
     name = repo.get("name")
     result: Dict[str, Any] = {"name": name}
     if not name:
         result["notes"] = ["Skipped: missing repo name"]
         return result
+    if is_negative(cache, owner, name, "not_found", ttl_negative):
+        result["notes"] = ["Skipped: cached repo not found"]
+        return result
+    if is_negative(cache, owner, name, "not_a_fork", ttl_negative):
+        result["notes"] = ["Skipped: cached not a fork"]
+        return result
 
     try:
-        repo_details_resp = api.get(f"/repos/{owner}/{name}")
+        repo_details = get_repo_meta(cache, owner, name, ttl_meta)
+        if repo_details is None:
+            repo_details_resp = api.get(f"/repos/{owner}/{name}")
+            repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
+            set_repo_meta(cache, owner, name, repo_details)
     except GitHubApiError as exc:
+        if exc.status == 404:
+            set_negative(cache, owner, name, "not_found")
         result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
         return result
 
-    repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
     if repo_details.get("archived") or repo_details.get("disabled"):
         result["notes"] = ["Skipped: archived or disabled"]
         return result
 
     if not repo_details.get("fork") or not repo_details.get("parent"):
+        set_negative(cache, owner, name, "not_a_fork")
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
@@ -408,9 +443,21 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
             result["notes"] = [f"Skipped: invalid ref {ref}"]
             return result
 
-    product_sha = _ref_sha(api, owner, name, product_ref)
-    staging_sha = _ref_sha(api, owner, name, staging_ref)
-    feature_sha = _ref_sha(api, owner, name, feature_ref)
+    product_sha = get_ref_sha(cache, owner, name, product_ref, ttl_meta)
+    if product_sha is None:
+        product_sha = _ref_sha(api, owner, name, product_ref)
+        if product_sha:
+            set_ref_sha(cache, owner, name, product_ref, product_sha)
+    staging_sha = get_ref_sha(cache, owner, name, staging_ref, ttl_meta)
+    if staging_sha is None:
+        staging_sha = _ref_sha(api, owner, name, staging_ref)
+        if staging_sha:
+            set_ref_sha(cache, owner, name, staging_ref, staging_sha)
+    feature_sha = get_ref_sha(cache, owner, name, feature_ref, ttl_meta)
+    if feature_sha is None:
+        feature_sha = _ref_sha(api, owner, name, feature_ref)
+        if feature_sha:
+            set_ref_sha(cache, owner, name, feature_ref, feature_sha)
 
     missing = [
         ref
@@ -427,7 +474,12 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
 
     gitlab_api = GitLabApi(cfg.gitlab_token, cfg.gitlab_host)
     try:
-        project_status = _ensure_gitlab_project(gitlab_api, cfg, name)
+        cached_project = get_gitlab_project(cache, owner, name, ttl_gitlab_project)
+        if cached_project in ("exists", "created"):
+            project_status = cached_project
+        else:
+            project_status = _ensure_gitlab_project(gitlab_api, cfg, name)
+            set_gitlab_project(cache, owner, name, project_status)
     except GitLabApiError as exc:
         result["notes"] = [f"Skipped: gitlab project error ({exc.status})"]
         return result
@@ -516,19 +568,25 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
             result["gitlab_default_branch"] = "skipped: branch missing"
 
         # Final branch presence check (API-based)
-        for branch in [
-            f"github/{product_ref}",
-            f"github/{staging_ref}",
-            product_ref,
-            staging_ref,
-            feature_ref,
-            release_ref,
-        ]:
-            try:
+    for branch in [
+        f"github/{product_ref}",
+        f"github/{staging_ref}",
+        product_ref,
+        staging_ref,
+        feature_ref,
+        release_ref,
+    ]:
+        try:
+            cached = get_gitlab_branch(cache, owner, name, branch, ttl_gitlab_branch)
+            if cached:
+                branch_presence[branch] = cached
+            else:
                 present = _gitlab_branch_exists(gitlab_api, cfg, name, branch)
-                branch_presence[branch] = "present" if present else "missing"
-            except GitLabApiError as exc:
-                branch_presence[branch] = f"error ({exc.status})"
+                status = "present" if present else "missing"
+                branch_presence[branch] = status
+                set_gitlab_branch(cache, owner, name, branch, status)
+        except GitLabApiError as exc:
+            branch_presence[branch] = f"error ({exc.status})"
 
         result["gitlab_mirror"] = mirror_results
         result["gitlab_dev_branches"] = dev_results
@@ -609,17 +667,18 @@ def main() -> int:
 
     api = GitHubApi(token=token)
     preflight = _preflight(api, cfg)
-    cache_path = os.environ.get("REPO_CACHE_PATH")
-    repos = _load_cached_repos(cache_path) if cache_path else None
-    if repos is None:
-        repos = discover_fork_repos(api, cfg.github_org, repo_filter)
-        if cache_path:
-            _store_cached_repos(cache_path, repos)
+    repos = discover_fork_repos(api, cfg.github_org, repo_filter)
+    cache_path = os.environ.get("REPO_META_CACHE_PATH") or os.environ.get("REPO_CACHE_PATH")
+    cache = load_cache(cache_path) if cache_path else {"version": 1, "orgs": {}}
+    ttl_meta = int(os.environ.get("REPO_CACHE_TTL_META", "800"))
+    ttl_negative = int(os.environ.get("REPO_CACHE_TTL_NEGATIVE", "186400"))
+    ttl_gitlab_project = int(os.environ.get("REPO_CACHE_TTL_GITLAB_PROJ", "186400"))
+    ttl_gitlab_branch = int(os.environ.get("REPO_CACHE_TTL_GITLAB_BRANCH", "186400"))
 
     results: List[Dict[str, Any]] = []
     for repo in repos:
         try:
-            result = process_repo(api, cfg, repo)
+            result = process_repo(api, cfg, repo, cache, ttl_meta, ttl_negative, ttl_gitlab_project, ttl_gitlab_branch)
         except Exception as exc:
             name = repo.get("name") if isinstance(repo, dict) else None
             result = {"name": name, "notes": [f"Skipped: processing error ({exc})"]}
@@ -627,6 +686,8 @@ def main() -> int:
             results.append(result)
         else:
             results.append({"name": None, "notes": ["Skipped: invalid result"]})
+    if cache_path:
+        save_cache(cache_path, cache)
 
     summary = format_summary(cfg, results)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")

@@ -28,7 +28,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      issues: write
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     timeout-minutes: 10
@@ -103,13 +102,18 @@ jobs:
           if [ ! -f "${GITHUB_WORKSPACE}/.cache/repo-discovery.json" ]; then
             printf '[]' > "${GITHUB_WORKSPACE}/.cache/repo-discovery.json"
           fi
+          if [ ! -f "${GITHUB_WORKSPACE}/.cache/repo-metadata.json" ]; then
+            printf '{}' > "${GITHUB_WORKSPACE}/.cache/repo-metadata.json"
+          fi
 
       - name: Cache repo discovery
         id: repo-cache
         if: ${{ !inputs.clear_cache }}
         uses: actions/cache/restore@v4
         with:
-          path: ${{ github.workspace }}/.cache/repo-discovery.json
+          path: |
+            ${{ github.workspace }}/.cache/repo-discovery.json
+            ${{ github.workspace }}/.cache/repo-metadata.json
           key: >-
             orchestrator-discovery-${{ github.repository }}-${{ github.run_id }}
           restore-keys: |
@@ -128,49 +132,76 @@ jobs:
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
-
-      - name: Load BWS config
-        id: bws
+      - name: Load BWS secrets to temp files
         shell: bash
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           set -euo pipefail
+          secrets_dir="${RUNNER_TEMP}/bws"
+          mkdir -p "$secrets_dir"
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
-            /bin/sh .github/scripts/bws_export_output.sh \
+            env SECRETS_DIR="${secrets_dir}" \
+            /bin/sh .github/scripts/bws_export_secret_files.sh \
+              "${secrets_dir}" \
               GH_ORG_SHARED_APP_ID \
+              GH_ORG_TBOX \
+              GH_ORG_SECOPS \
+              GH_ORG_WIKI \
+              GH_ORG_DIVERGE \
               GH_BRANCH_PREFIX \
               GH_BRANCH_PRODUCT \
               GH_BRANCH_STAGING \
               GH_BRANCH_SNAPSHOT \
               GH_BRANCH_FEATURE \
-              GH_ORG_TBOX \
-              GH_ORG_SECOPS \
-              GH_ORG_WIKI \
-              GH_ORG_DIVERGE
+              GH_ORG_SHARED_PEM
 
-      - name: Write app key
-        id: app-key-file
+      - name: Expose secret file paths
         shell: bash
-        env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           set -euo pipefail
-          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            /bin/sh .github/scripts/bws_export_secret_file.sh \
-              GH_ORG_SHARED_PEM \
-              "${RUNNER_TEMP}/gh-app-key.pem"
-          echo "path=${RUNNER_TEMP}/gh-app-key.pem" >> "$GITHUB_OUTPUT"
+          secrets_dir="${RUNNER_TEMP}/bws"
+          for key in \
+            GH_ORG_SHARED_APP_ID \
+            GH_ORG_TBOX \
+            GH_ORG_SECOPS \
+            GH_ORG_WIKI \
+            GH_ORG_DIVERGE \
+            GH_BRANCH_PREFIX \
+            GH_BRANCH_PRODUCT \
+            GH_BRANCH_STAGING \
+            GH_BRANCH_SNAPSHOT \
+            GH_BRANCH_FEATURE \
+            GH_ORG_SHARED_PEM
+          do
+            echo "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
+          done
+
+      - name: Prepare app credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          src="${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM"
+          dst="${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem"
+          data="$(cat "$src")"
+          if printf '%s' "$data" | grep -q '\\n'; then
+            printf '%b' "$data" > "$dst"
+          else
+            printf '%s' "$data" > "$dst"
+          fi
+          chmod 600 "$dst"
+          echo "GH_ORG_SHARED_PEM_FILE=${dst}" >> "$GITHUB_ENV"
+          app_id_file="${RUNNER_TEMP}/bws/GH_ORG_SHARED_APP_ID"
+          echo "GH_ORG_SHARED_APP_ID_FILE=${app_id_file}" >> "$GITHUB_ENV"
 
       - name: Read app key
         id: app-key
         shell: bash
         run: |
           set -euo pipefail
-          pem="$(cat "${RUNNER_TEMP}/gh-app-key.pem")"
+          pem="$(cat "${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem")"
           printf '%s\n' "$pem" | while IFS= read -r line; do
             if [ -n "$line" ]; then
               printf '::add-mask::%s\n' "$line"
@@ -182,24 +213,60 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Read app context
+        id: app-context
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_id="$(cat "${RUNNER_TEMP}/bws/GH_ORG_SHARED_APP_ID")"
+          echo "app_id=${app_id}" >> "$GITHUB_OUTPUT"
+          echo "org=${{ matrix.github_org }}" >> "$GITHUB_OUTPUT"
+
       - name: Mint GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
+          app-id: ${{ steps.app-context.outputs.app_id }}
           private-key: ${{ steps.app-key.outputs.private_key }}
-          owner: ${{ matrix.github_org }}
+          owner: ${{ steps.app-context.outputs.org }}
           repositories: ${{ inputs.repo }}
 
-      - name: Write runtime token file
-        id: token-files
+      - name: Store app token
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          gh_token_file="${RUNNER_TEMP}/github-app-token"
-          printf '%s' "${{ steps.app-token.outputs.token }}" > "$gh_token_file"
-          echo "github_token_file=$gh_token_file" >> "$GITHUB_OUTPUT"
+          token_file="${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
+          printf '%s' "${{ steps.app-token.outputs.token }}" > "$token_file"
+          echo "GITHUB_APP_TOKEN_FILE=${token_file}" >> "$GITHUB_ENV"
+
+      - name: Select org file path
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix_org="${{ matrix.github_org }}"
+          org_tbox="$(cat "${RUNNER_TEMP}/bws/GH_ORG_TBOX")"
+          org_secops="$(cat "${RUNNER_TEMP}/bws/GH_ORG_SECOPS")"
+          org_wiki="$(cat "${RUNNER_TEMP}/bws/GH_ORG_WIKI")"
+          org_diverge="$(cat "${RUNNER_TEMP}/bws/GH_ORG_DIVERGE")"
+          {
+            printf '%s<<EOF\nEOF\n' "GH_ORG_TBOX_FILE"
+            printf '%s<<EOF\nEOF\n' "GH_ORG_SECOPS_FILE"
+            printf '%s<<EOF\nEOF\n' "GH_ORG_WIKI_FILE"
+            printf '%s<<EOF\nEOF\n' "GH_ORG_DIVERGE_FILE"
+          } >> "$GITHUB_ENV"
+          if [ "$matrix_org" = "$org_tbox" ]; then
+            echo "GH_ORG_TBOX_FILE=${RUNNER_TEMP}/bws/GH_ORG_TBOX" >> "$GITHUB_ENV"
+          elif [ "$matrix_org" = "$org_secops" ]; then
+            echo "GH_ORG_SECOPS_FILE=${RUNNER_TEMP}/bws/GH_ORG_SECOPS" >> "$GITHUB_ENV"
+          elif [ "$matrix_org" = "$org_wiki" ]; then
+            echo "GH_ORG_WIKI_FILE=${RUNNER_TEMP}/bws/GH_ORG_WIKI" >> "$GITHUB_ENV"
+          elif [ "$matrix_org" = "$org_diverge" ]; then
+            echo "GH_ORG_DIVERGE_FILE=${RUNNER_TEMP}/bws/GH_ORG_DIVERGE" >> "$GITHUB_ENV"
+          else
+            echo "Unknown org mapping for ${matrix_org}" >&2
+            exit 1
+          fi
 
       - name: Validate INPUT_REPO
         shell: bash
@@ -213,25 +280,26 @@ jobs:
         env:
           INPUT_REPO: ${{ inputs.repo }}
           REPO_CACHE_PATH: ${{ github.workspace }}/.cache/repo-discovery.json
-          REPO_CACHE_TTL_SECONDS: >-
-            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_SECONDS ||
-            '3600' }}
-          GH_ORG_SHARED_PEM_FILE: ${{ steps.app-key-file.outputs.path }}
-          GH_ORG_SHARED_APP_ID: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
-          GH_BRANCH_PREFIX: ${{ steps.bws.outputs.GH_BRANCH_PREFIX }}
-          GH_BRANCH_PRODUCT: ${{ steps.bws.outputs.GH_BRANCH_PRODUCT }}
-          GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
-          GH_BRANCH_SNAPSHOT: ${{ steps.bws.outputs.GH_BRANCH_SNAPSHOT }}
-          GH_BRANCH_FEATURE: ${{ steps.bws.outputs.GH_BRANCH_FEATURE }}
-          GH_ORG_TBOX: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_TBOX && steps.bws.outputs.GH_ORG_TBOX || '' }}
-          GH_ORG_SECOPS: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_SECOPS && steps.bws.outputs.GH_ORG_SECOPS || '' }}
-          GH_ORG_WIKI: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_WIKI && steps.bws.outputs.GH_ORG_WIKI || '' }}
-          GH_ORG_DIVERGE: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_DIVERGE && steps.bws.outputs.GH_ORG_DIVERGE || '' }}
-          GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
+          REPO_META_CACHE_PATH: ${{ github.workspace }}/.cache/repo-metadata.json
+          REPO_CACHE_TTL_DISCOVERY: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY ||
+            '86400' }}
+          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META }}
+          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE }}
+          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ }}
+          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH }}
+          GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_PEM.pem
+          GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
+          GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
+          GH_BRANCH_PRODUCT_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PRODUCT
+          GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
+          GH_BRANCH_SNAPSHOT_FILE: ${{ runner.temp }}/bws/GH_BRANCH_SNAPSHOT
+          GH_BRANCH_FEATURE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_FEATURE
+          GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
         run: |
           python3 .github/scripts/orchestrator.py
 
-      - name: Ensure repo discovery cache file
+      - name: Ensure repo cache files
         if: always()
         shell: bash
         env:
@@ -244,18 +312,36 @@ jobs:
             printf '[]' > "${CACHE_PATH}"
           fi
 
-      - name: Save repo discovery cache
+      - name: Save repo caches
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ${{ github.workspace }}/.cache/repo-discovery.json
+          path: |
+            ${{ github.workspace }}/.cache/repo-discovery.json
+            ${{ github.workspace }}/.cache/repo-metadata.json
           key: >-
             orchestrator-discovery-${{ github.repository }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
-          set -euo pipefail
-          rm -f "${RUNNER_TEMP}/gh-app-key.pem" \
-                "${RUNNER_TEMP}/github-app-token"
+          rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem" \
+                "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
+          rm -rf "${RUNNER_TEMP}/bws"
+          for key in \
+            GH_ORG_SHARED_APP_ID_FILE \
+            GH_ORG_TBOX_FILE \
+            GH_ORG_SECOPS_FILE \
+            GH_ORG_WIKI_FILE \
+            GH_ORG_DIVERGE_FILE \
+            GH_BRANCH_PREFIX_FILE \
+            GH_BRANCH_PRODUCT_FILE \
+            GH_BRANCH_STAGING_FILE \
+            GH_BRANCH_SNAPSHOT_FILE \
+            GH_BRANCH_FEATURE_FILE \
+            GH_ORG_SHARED_PEM_FILE \
+            GITHUB_APP_TOKEN_FILE
+          do
+            printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
+          done

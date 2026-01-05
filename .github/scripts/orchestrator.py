@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 from config import Config, load_config
@@ -12,6 +13,16 @@ from summary import format_summary
 from sync_mirror import sync_mirror
 from ensure_branches import ensure_branch
 from secret_env import read_required_secret_file
+from repo_metadata_cache import (
+    get_ref_sha,
+    get_repo_meta,
+    is_negative,
+    load_cache,
+    save_cache,
+    set_negative,
+    set_ref_sha,
+    set_repo_meta,
+)
 
 
 WORKFLOW_CRON_1 = "17 3 * * *"
@@ -129,7 +140,15 @@ def _repo_has_parent(repo: Dict[str, Any]) -> bool:
 
 
 
-def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str) -> Dict[str, Any]:
+def process_repo(
+    api: GitHubApi,
+    cfg: Config,
+    repo: Dict[str, Any],
+    run_id: str,
+    cache: Dict[str, Any],
+    ttl_meta: int,
+    ttl_negative: int,
+) -> Dict[str, Any]:
     owner = cfg.org
     name = repo.get("name")
     result: Dict[str, Any] = {"name": name}
@@ -138,18 +157,30 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
         result["notes"] = ["Skipped: missing repo name"]
         return result
 
-    try:
-        repo_details_resp = api.request("GET", f"/repos/{owner}/{name}")
-    except GitHubApiError as exc:
-        result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
+    if is_negative(cache, owner, name, "not_found", ttl_negative):
+        result["notes"] = ["Skipped: cached repo not found"]
+        return result
+    if is_negative(cache, owner, name, "not_a_fork", ttl_negative):
+        result["notes"] = ["Skipped: cached not a fork"]
         return result
 
-    repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
+    try:
+        repo_details = get_repo_meta(cache, owner, name, ttl_meta)
+        if repo_details is None:
+            repo_details_resp = api.request("GET", f"/repos/{owner}/{name}")
+            repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
+            set_repo_meta(cache, owner, name, repo_details)
+    except GitHubApiError as exc:
+        if exc.status == 404:
+            set_negative(cache, owner, name, "not_found")
+        result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
+        return result
     if repo_details.get("archived") or repo_details.get("disabled"):
         result["notes"] = ["Skipped: archived or disabled"]
         return result
 
     if not repo_details.get("fork") or not _repo_has_parent(repo_details):
+        set_negative(cache, owner, name, "not_a_fork")
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
@@ -187,7 +218,10 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
 
     # Step 2: ensure branches exist (create-only)
     try:
-        mirror_sha = _ref_sha(api, owner, name, mirror)
+        mirror_sha = get_ref_sha(cache, owner, name, mirror, ttl_meta)
+        if mirror_sha is None:
+            mirror_sha = _ref_sha(api, owner, name, mirror)
+            set_ref_sha(cache, owner, name, mirror, mirror_sha)
     except GitHubApiError as exc:
         issue = create_or_update_issue(
             api,
@@ -210,9 +244,15 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
     branch_results: Dict[str, Any] = {}
     try:
         branch_results["product"] = ensure_branch(api, owner, name, product, mirror_sha)
-        product_sha_before = _ref_sha(api, owner, name, product)
+        product_sha_before = get_ref_sha(cache, owner, name, product, ttl_meta)
+        if product_sha_before is None:
+            product_sha_before = _ref_sha(api, owner, name, product)
+            set_ref_sha(cache, owner, name, product, product_sha_before)
         branch_results["staging"] = ensure_branch(api, owner, name, staging, product_sha_before)
-        staging_sha = _ref_sha(api, owner, name, staging)
+        staging_sha = get_ref_sha(cache, owner, name, staging, ttl_meta)
+        if staging_sha is None:
+            staging_sha = _ref_sha(api, owner, name, staging)
+            set_ref_sha(cache, owner, name, staging, staging_sha)
         branch_results["snapshot"] = ensure_branch(api, owner, name, snapshot, staging_sha)
         branch_results["feature"] = ensure_branch(api, owner, name, feature, product_sha_before)
         result["branch_bootstrap"] = json.dumps(branch_results)
@@ -244,10 +284,14 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
         ("feature", feature),
     ):
         try:
-            _ref_sha(api, owner, name, ref)
+            sha = get_ref_sha(cache, owner, name, ref, ttl_meta)
+            if sha is None:
+                sha = _ref_sha(api, owner, name, ref)
+                set_ref_sha(cache, owner, name, ref, sha)
             presence[label] = "present"
         except GitHubApiError as exc:
             if exc.status == 404:
+                set_negative(cache, owner, name, "missing_ref", ref=ref)
                 presence[label] = "missing"
             else:
                 presence[label] = f"error ({exc.status})"
@@ -261,17 +305,20 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
         result["product_merge"] = "up_to_date"
     elif status_pm == "behind":
         try:
-            ff_update(api, owner, name, product, _head_sha(compare_pm, _ref_sha(api, owner, name, mirror)))
+            ff_update(api, owner, name, product, _head_sha(compare_pm, mirror_sha))
             result["product_merge"] = "fast-forwarded"
         except GitHubApiError:
-            _force_update(api, owner, name, product, _ref_sha(api, owner, name, mirror))
+            _force_update(api, owner, name, product, mirror_sha)
             result["product_merge"] = "reset (ff failed)"
     else:
-        _force_update(api, owner, name, product, _ref_sha(api, owner, name, mirror))
+        _force_update(api, owner, name, product, mirror_sha)
         result["product_merge"] = f"reset ({status_pm})"
 
     # Step 4: keep staging + feature at least one commit behind product
-    product_sha_after = _ref_sha(api, owner, name, product)
+    product_sha_after = get_ref_sha(cache, owner, name, product, ttl_meta)
+    if product_sha_after is None:
+        product_sha_after = _ref_sha(api, owner, name, product)
+        set_ref_sha(cache, owner, name, product, product_sha_after)
     product_changed = product_sha_after != product_sha_before
     result["product_changed"] = "yes" if product_changed else "no"
 
@@ -336,9 +383,16 @@ def main() -> int:
     api = GitHubApi(token=token)
     repos = discover_fork_repos(api, cfg.org, repo_filter)
 
+    cache_path = os.environ.get("REPO_META_CACHE_PATH") or os.environ.get("REPO_CACHE_PATH")
+    cache = load_cache(cache_path) if cache_path else {"version": 1, "orgs": {}}
+    ttl_meta = int(os.environ.get("REPO_CACHE_TTL_META", "800"))
+    ttl_negative = int(os.environ.get("REPO_CACHE_TTL_NEGATIVE", "186400"))
+
     results: List[Dict[str, Any]] = []
     for repo in repos:
-        results.append(process_repo(api, cfg, repo, run_id))
+        results.append(process_repo(api, cfg, repo, run_id, cache, ttl_meta, ttl_negative))
+    if cache_path:
+        save_cache(cache_path, cache)
 
     config_summary = {
         "org": cfg.org,

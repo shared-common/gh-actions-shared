@@ -90,7 +90,7 @@ def discover_fork_repos(api: GitHubApi, org: str, repo_filter: Optional[str]) ->
     repo_filter = _validate_repo_filter(repo_filter)
     cache_path = _cache_path(org, repo_filter)
     try:
-        ttl_seconds = int(os.environ.get("REPO_CACHE_TTL_SECONDS", "3600"))
+        ttl_seconds = int(os.environ.get("REPO_CACHE_TTL_DISCOVERY", "3600"))
     except ValueError:
         ttl_seconds = 3600
     if ttl_seconds < 0:

@@ -17,6 +17,9 @@ This repository runs scheduled workflows that:
 
 No PRs are created. No force pushes are performed. If a repo diverges or conflicts, the run records an issue and skips remaining steps for that repo.
 
+## Security
+See `SECURITY.md` for the repo-specific threat model and mitigations.
+
 ## Required GitHub App permissions
 
 Install a GitHub App on the organization with **minimum** permissions:
@@ -35,8 +38,17 @@ Repo secret in `gh-actions`:
 
 Repo variable:
 - `BWS_PROJECT_ID` (Bitwarden Secrets Manager project UUID)
+- `REPO_CACHE_TTL_DISCOVERY` (repo discovery cache TTL in seconds)
+- `REPO_CACHE_TTL_META` (repo metadata + ref SHA cache TTL in seconds)
+- `REPO_CACHE_TTL_NEGATIVE` (negative cache TTL in seconds)
+- `REPO_CACHE_TTL_GITLAB_PROJ` (GitLab project existence cache TTL in seconds)
+- `REPO_CACHE_TTL_GITLAB_BRANCH` (GitLab branch/protection cache TTL in seconds)
 
 Bitwarden Secrets Manager keys (secret name → ENV):
+
+All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed via `*_FILE` env vars (e.g., `GH_ORG_SHARED_PEM_FILE`).
+
+Caches are stored under `${GITHUB_WORKSPACE}/.cache`, including `repo-discovery.json` and `repo-metadata.json`.
 
 - `GH_ORG_SHARED_APP_ID`
 - `GH_ORG_SHARED_PEM`
@@ -80,6 +92,7 @@ The workflows use static cron entries (GitHub Actions cannot take them from secr
 You can run the workflow manually and optionally target a single repo:
 
 - `repo`: fork repository name (string)
+- `clear_cache`: clear repo discovery cache before running (boolean)
 
 ## GitLab mirror workflow
 

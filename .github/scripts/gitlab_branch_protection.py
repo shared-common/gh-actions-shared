@@ -17,6 +17,18 @@ from secret_env import (
     read_required_secret_file,
     read_required_value,
 )
+from repo_metadata_cache import (
+    get_gitlab_project,
+    get_gitlab_protection,
+    get_repo_meta,
+    is_negative,
+    load_cache,
+    save_cache,
+    set_gitlab_project,
+    set_gitlab_protection,
+    set_negative,
+    set_repo_meta,
+)
 
 
 @dataclass(frozen=True)
@@ -196,48 +208,87 @@ def _remove_branch_protection(api: GitLabApi, cfg: GitLabProtectionConfig, repo:
         raise
 
 
-def process_repo(api: GitHubApi, cfg: GitLabProtectionConfig, repo: Dict[str, Any]) -> Dict[str, Any]:
+def process_repo(
+    api: GitHubApi,
+    cfg: GitLabProtectionConfig,
+    repo: Dict[str, Any],
+    cache: Dict[str, Any],
+    ttl_meta: int,
+    ttl_negative: int,
+    ttl_gitlab_project: int,
+    ttl_gitlab_branch: int,
+) -> Dict[str, Any]:
     owner = cfg.github_org
     name = repo.get("name")
     result: Dict[str, Any] = {"name": name}
     if not name:
         result["notes"] = ["Skipped: missing repo name"]
         return result
+    if is_negative(cache, owner, name, "not_found", ttl_negative):
+        result["notes"] = ["Skipped: cached repo not found"]
+        return result
+    if is_negative(cache, owner, name, "not_a_fork", ttl_negative):
+        result["notes"] = ["Skipped: cached not a fork"]
+        return result
 
     try:
-        repo_details_resp = api.get(f"/repos/{owner}/{name}")
+        repo_details = get_repo_meta(cache, owner, name, ttl_meta)
+        if repo_details is None:
+            repo_details_resp = api.get(f"/repos/{owner}/{name}")
+            repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
+            set_repo_meta(cache, owner, name, repo_details)
     except GitHubApiError as exc:
+        if exc.status == 404:
+            set_negative(cache, owner, name, "not_found")
         result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
         return result
 
-    repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
     if repo_details.get("archived") or repo_details.get("disabled"):
         result["notes"] = ["Skipped: archived or disabled"]
         return result
 
     if not repo_details.get("fork") or not repo_details.get("parent"):
+        set_negative(cache, owner, name, "not_a_fork")
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
     gitlab_api = GitLabApi(cfg.gitlab_token, cfg.gitlab_host)
     try:
-        _gitlab_project_id(cfg, name)
+        cached_project = get_gitlab_project(cache, owner, name, ttl_gitlab_project)
+        if cached_project not in ("exists", "created"):
+            _gitlab_project_id(cfg, name)
+            set_gitlab_project(cache, owner, name, "exists")
     except Exception as exc:  # noqa: BLE001 - safe summary path
         result["notes"] = [f"Skipped: invalid gitlab project ({exc})"]
         return result
 
     try:
-        result["protect_mcr_staging"] = _ensure_branch_protection(
-            gitlab_api,
-            cfg,
-            name,
-            cfg.staging_ref,
-        )
+        cached = get_gitlab_protection(cache, owner, name, cfg.staging_ref, ttl_gitlab_branch)
+        if cached:
+            result["protect_mcr_staging"] = cached
+        else:
+            result["protect_mcr_staging"] = _ensure_branch_protection(
+                gitlab_api,
+                cfg,
+                name,
+                cfg.staging_ref,
+            )
+            set_gitlab_protection(cache, owner, name, cfg.staging_ref, result["protect_mcr_staging"])
     except GitLabApiError as exc:
         result["protect_mcr_staging"] = f"failed ({exc.status})"
 
     try:
-        result["protect_mcr_release"] = _ensure_branch_protection(gitlab_api, cfg, name, cfg.release_ref)
+        cached = get_gitlab_protection(cache, owner, name, cfg.release_ref, ttl_gitlab_branch)
+        if cached:
+            result["protect_mcr_release"] = cached
+        else:
+            result["protect_mcr_release"] = _ensure_branch_protection(
+                gitlab_api,
+                cfg,
+                name,
+                cfg.release_ref,
+            )
+            set_gitlab_protection(cache, owner, name, cfg.release_ref, result["protect_mcr_release"])
     except GitLabApiError as exc:
         result["protect_mcr_release"] = f"failed ({exc.status})"
 
@@ -287,10 +338,18 @@ def main() -> int:
     cfg = load_config()
     api = GitHubApi(token=token)
     repos = discover_fork_repos(api, cfg.github_org, repo_filter)
+    cache_path = os.environ.get("REPO_META_CACHE_PATH") or os.environ.get("REPO_CACHE_PATH")
+    cache = load_cache(cache_path) if cache_path else {"version": 1, "orgs": {}}
+    ttl_meta = int(os.environ.get("REPO_CACHE_TTL_META", "800"))
+    ttl_negative = int(os.environ.get("REPO_CACHE_TTL_NEGATIVE", "3600"))
+    ttl_gitlab_project = int(os.environ.get("REPO_CACHE_TTL_GITLAB_PROJ", "3600"))
+    ttl_gitlab_branch = int(os.environ.get("REPO_CACHE_TTL_GITLAB_BRANCH", "3600"))
 
     results: List[Dict[str, Any]] = []
     for repo in repos:
-        results.append(process_repo(api, cfg, repo))
+        results.append(process_repo(api, cfg, repo, cache, ttl_meta, ttl_negative, ttl_gitlab_project, ttl_gitlab_branch))
+    if cache_path:
+        save_cache(cache_path, cache)
 
     summary = _summary_lines(results)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
