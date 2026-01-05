@@ -86,7 +86,7 @@ TTLs are controlled by repo variables:
 - `REPO_CACHE_TTL_GITLAB_PROJ`: GitLab project existence cache TTL (seconds).
 - `REPO_CACHE_TTL_GITLAB_BRANCH`: GitLab branch/protection cache TTL (seconds).
 
-Caches must never store secrets. Use `clear_cache` to force refresh.
+Caches must never store secrets. Use `clear_cache` or the "Clear Repo Caches" workflow to force refresh.
 
 ## Residual Risks to Monitor
 

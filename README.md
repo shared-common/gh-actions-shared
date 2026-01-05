@@ -91,7 +91,10 @@ The workflows use static cron entries (GitHub Actions cannot take them from secr
 You can run the workflow manually and optionally target a single repo:
 
 - `repo`: fork repository name (string)
-- `clear_cache`: clear repo discovery cache before running (boolean)
+- `clear_cache`: clear all repo caches before running (boolean)
+
+Cache-only reset
+- Use the "Clear Repo Caches" workflow to write empty cache files without running the orchestrator or GitLab mirror logic.
 
 ## GitLab mirror workflow
 
