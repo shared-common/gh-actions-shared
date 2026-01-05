@@ -1,18 +1,6 @@
 #!/bin/sh
 set -eu
 
-sh .github/scripts/bws_export_env_unmasked.sh \
-  GH_ORG_TBOX \
-  GH_ORG_SECOPS \
-  GH_ORG_WIKI \
-  GH_ORG_DIVERGE \
-  GL_GROUP_ZFORKS \
-  GL_GROUP_TBOX \
-  GL_GROUP_SECOPS \
-  GL_GROUP_WIKI \
-  GL_GROUP_ZDIVERGE \
-  GL_GROUP_GENERAL
-
 python3 - <<'PY' >> "${GITHUB_OUTPUT:?}"
 import json
 import os
