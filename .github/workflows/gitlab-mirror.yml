@@ -128,9 +128,9 @@ jobs:
             ${{ github.workspace }}/.cache/repo-discovery.json
             ${{ github.workspace }}/.cache/repo-metadata.json
           key: >-
-            gitlab-mirror-discovery-${{ github.repository }}-${{ github.run_id }}
+            gitlab-mirror-discovery-${{ github.repository }}-${{ matrix.github_org }}-${{ matrix.github_org }}-${{ github.run_id }}
           restore-keys: |
-            gitlab-mirror-discovery-${{ github.repository }}-
+            gitlab-mirror-discovery-${{ github.repository }}-${{ matrix.github_org }}-
 
       - name: Clear repo discovery cache
         if: ${{ inputs.clear_cache }}
@@ -138,6 +138,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f "${GITHUB_WORKSPACE}/.cache/repo-discovery.json"
+          rm -f "${GITHUB_WORKSPACE}/.cache/repo-metadata.json"
 
       - name: Install bws CLI
         uses: ./.github/actions/install-bws
@@ -286,10 +287,17 @@ jobs:
           REPO_CACHE_TTL_DISCOVERY: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY ||
             '3600' }}
-          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META || '800' }}
-          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
-          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
-          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
+          REPO_CACHE_TTL_META: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_META || '800' }}
+          REPO_CACHE_TTL_NEGATIVE: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_NEGATIVE ||
+            '1800' }}
+          REPO_CACHE_TTL_GITLAB_PROJ: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_PROJ ||
+            '21600' }}
+          REPO_CACHE_TTL_GITLAB_BRANCH: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_BRANCH ||
+            '900' }}
           GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_PEM.pem
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
@@ -321,10 +329,17 @@ jobs:
           REPO_CACHE_TTL_DISCOVERY: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY ||
             '3600' }}
-          REPO_CACHE_TTL_META: ${{ vars.REPO_CACHE_TTL_META || '800' }}
-          REPO_CACHE_TTL_NEGATIVE: ${{ vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
-          REPO_CACHE_TTL_GITLAB_PROJ: ${{ vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
-          REPO_CACHE_TTL_GITLAB_BRANCH: ${{ vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
+          REPO_CACHE_TTL_META: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_META || '800' }}
+          REPO_CACHE_TTL_NEGATIVE: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_NEGATIVE ||
+            '1800' }}
+          REPO_CACHE_TTL_GITLAB_PROJ: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_PROJ ||
+            '21600' }}
+          REPO_CACHE_TTL_GITLAB_BRANCH: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_BRANCH ||
+            '900' }}
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
           GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
@@ -362,7 +377,7 @@ jobs:
             ${{ github.workspace }}/.cache/repo-discovery.json
             ${{ github.workspace }}/.cache/repo-metadata.json
           key: >-
-            gitlab-mirror-discovery-${{ github.repository }}-${{ github.run_id }}
+            gitlab-mirror-discovery-${{ github.repository }}-${{ matrix.github_org }}-${{ matrix.github_org }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()
