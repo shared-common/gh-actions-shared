@@ -287,9 +287,6 @@ jobs:
             '3600' }}
           REPO_CACHE_TTL_META: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_META || '800' }}
-          REPO_CACHE_TTL_NEGATIVE: >-
-            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_NEGATIVE ||
-            '1800' }}
           REPO_CACHE_TTL_GITLAB_PROJ: >-
             ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_PROJ ||
             '21600' }}
@@ -313,7 +310,6 @@ jobs:
         env:
           TTL_DISCOVERY: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY || '3600' }}
           TTL_META: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_META || '800' }}
-          TTL_NEGATIVE: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
           TTL_GITLAB_PROJ: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
           TTL_GITLAB_BRANCH: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
         run: |
@@ -324,7 +320,6 @@ jobs:
               printf '## Cache TTLs\n'
               printf -- '- discovery: `%s`\n' "$TTL_DISCOVERY"
               printf -- '- meta: `%s`\n' "$TTL_META"
-              printf -- '- negative: `%s`\n' "$TTL_NEGATIVE"
               printf -- '- gitlab_project: `%s`\n' "$TTL_GITLAB_PROJ"
               printf -- '- gitlab_branch: `%s`\n' "$TTL_GITLAB_BRANCH"
             } >> "$summary_path"

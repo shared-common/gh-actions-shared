@@ -40,7 +40,6 @@ Repo variable:
 - `BWS_PROJECT_ID` (Bitwarden Secrets Manager project UUID)
 - `REPO_CACHE_TTL_DISCOVERY` (repo discovery cache TTL in seconds)
 - `REPO_CACHE_TTL_META` (repo metadata + ref SHA cache TTL in seconds)
-- `REPO_CACHE_TTL_NEGATIVE` (negative cache TTL in seconds)
 - `REPO_CACHE_TTL_GITLAB_PROJ` (GitLab project existence cache TTL in seconds)
 - `REPO_CACHE_TTL_GITLAB_BRANCH` (GitLab branch/protection cache TTL in seconds)
 

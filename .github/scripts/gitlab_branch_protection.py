@@ -21,12 +21,10 @@ from repo_metadata_cache import (
     get_gitlab_project,
     get_gitlab_protection,
     get_repo_meta,
-    is_negative,
     load_cache,
     save_cache,
     set_gitlab_project,
     set_gitlab_protection,
-    set_negative,
     set_repo_meta,
 )
 
@@ -214,7 +212,6 @@ def process_repo(
     repo: Dict[str, Any],
     cache: Dict[str, Any],
     ttl_meta: int,
-    ttl_negative: int,
     ttl_gitlab_project: int,
     ttl_gitlab_branch: int,
 ) -> Dict[str, Any]:
@@ -224,13 +221,6 @@ def process_repo(
     if not name:
         result["notes"] = ["Skipped: missing repo name"]
         return result
-    if is_negative(cache, owner, name, "not_found", ttl_negative):
-        result["notes"] = ["Skipped: cached repo not found"]
-        return result
-    if is_negative(cache, owner, name, "not_a_fork", ttl_negative):
-        result["notes"] = ["Skipped: cached not a fork"]
-        return result
-
     try:
         repo_details = get_repo_meta(cache, owner, name, ttl_meta)
         if repo_details is None:
@@ -238,8 +228,6 @@ def process_repo(
             repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
             set_repo_meta(cache, owner, name, repo_details)
     except GitHubApiError as exc:
-        if exc.status == 404:
-            set_negative(cache, owner, name, "not_found")
         result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
         return result
 
@@ -248,7 +236,6 @@ def process_repo(
         return result
 
     if not repo_details.get("fork") or not repo_details.get("parent"):
-        set_negative(cache, owner, name, "not_a_fork")
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
@@ -350,13 +337,12 @@ def main() -> int:
             return default
 
     ttl_meta = _ttl("REPO_CACHE_TTL_META", 800)
-    ttl_negative = _ttl("REPO_CACHE_TTL_NEGATIVE", 1800)
     ttl_gitlab_project = _ttl("REPO_CACHE_TTL_GITLAB_PROJ", 21600)
     ttl_gitlab_branch = _ttl("REPO_CACHE_TTL_GITLAB_BRANCH", 900)
 
     results: List[Dict[str, Any]] = []
     for repo in repos:
-        results.append(process_repo(api, cfg, repo, cache, ttl_meta, ttl_negative, ttl_gitlab_project, ttl_gitlab_branch))
+        results.append(process_repo(api, cfg, repo, cache, ttl_meta, ttl_gitlab_project, ttl_gitlab_branch))
     if cache_path:
         save_cache(cache_path, cache)
 

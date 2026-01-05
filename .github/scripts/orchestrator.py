@@ -16,10 +16,8 @@ from secret_env import read_required_secret_file
 from repo_metadata_cache import (
     get_ref_sha,
     get_repo_meta,
-    is_negative,
     load_cache,
     save_cache,
-    set_negative,
     set_ref_sha,
     set_repo_meta,
 )
@@ -147,7 +145,6 @@ def process_repo(
     run_id: str,
     cache: Dict[str, Any],
     ttl_meta: int,
-    ttl_negative: int,
 ) -> Dict[str, Any]:
     owner = cfg.org
     name = repo.get("name")
@@ -157,13 +154,6 @@ def process_repo(
         result["notes"] = ["Skipped: missing repo name"]
         return result
 
-    if is_negative(cache, owner, name, "not_found", ttl_negative):
-        result["notes"] = ["Skipped: cached repo not found"]
-        return result
-    if is_negative(cache, owner, name, "not_a_fork", ttl_negative):
-        result["notes"] = ["Skipped: cached not a fork"]
-        return result
-
     try:
         repo_details = get_repo_meta(cache, owner, name, ttl_meta)
         if repo_details is None:
@@ -171,8 +161,6 @@ def process_repo(
             repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
             set_repo_meta(cache, owner, name, repo_details)
     except GitHubApiError as exc:
-        if exc.status == 404:
-            set_negative(cache, owner, name, "not_found")
         result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
         return result
     if repo_details.get("archived") or repo_details.get("disabled"):
@@ -180,7 +168,6 @@ def process_repo(
         return result
 
     if not repo_details.get("fork") or not _repo_has_parent(repo_details):
-        set_negative(cache, owner, name, "not_a_fork")
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
@@ -291,7 +278,6 @@ def process_repo(
             presence[label] = "present"
         except GitHubApiError as exc:
             if exc.status == 404:
-                set_negative(cache, owner, name, "missing_ref", ref=ref)
                 presence[label] = "missing"
             else:
                 presence[label] = f"error ({exc.status})"
@@ -395,11 +381,10 @@ def main() -> int:
             return default
 
     ttl_meta = _ttl("REPO_CACHE_TTL_META", 800)
-    ttl_negative = _ttl("REPO_CACHE_TTL_NEGATIVE", 1800)
 
     results: List[Dict[str, Any]] = []
     for repo in repos:
-        results.append(process_repo(api, cfg, repo, run_id, cache, ttl_meta, ttl_negative))
+        results.append(process_repo(api, cfg, repo, run_id, cache, ttl_meta))
     if cache_path:
         save_cache(cache_path, cache)
 

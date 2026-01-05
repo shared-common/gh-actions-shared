@@ -101,54 +101,6 @@ def set_ref_sha(data: Dict[str, Any], org: str, repo: str, ref: str, sha: str) -
     refs[ref] = {"ts": _now(), "sha": sha}
 
 
-def is_negative(
-    data: Dict[str, Any],
-    org: str,
-    repo: str,
-    kind: str,
-    ttl: int,
-    ref: Optional[str] = None,
-) -> bool:
-    negative = _repo_cache(data, org, repo).get("negative")
-    if not isinstance(negative, dict):
-        return False
-    if kind == "missing_ref":
-        missing = negative.get("missing_refs")
-        if not isinstance(missing, dict) or not ref:
-            return False
-        entry = missing.get(ref)
-        if not isinstance(entry, dict):
-            return False
-        return _is_fresh(entry.get("ts"), ttl)
-    entry = negative.get(kind)
-    if not isinstance(entry, dict):
-        return False
-    return _is_fresh(entry.get("ts"), ttl)
-
-
-def set_negative(
-    data: Dict[str, Any],
-    org: str,
-    repo: str,
-    kind: str,
-    ref: Optional[str] = None,
-) -> None:
-    repo_cache = _repo_cache(data, org, repo)
-    negative = repo_cache.setdefault("negative", {})
-    if not isinstance(negative, dict):
-        negative = {}
-        repo_cache["negative"] = negative
-    if kind == "missing_ref":
-        missing = negative.setdefault("missing_refs", {})
-        if not isinstance(missing, dict):
-            missing = {}
-            negative["missing_refs"] = missing
-        if ref:
-            missing[ref] = {"ts": _now()}
-        return
-    negative[kind] = {"ts": _now()}
-
-
 def get_gitlab_project(data: Dict[str, Any], org: str, repo: str, ttl: int) -> Optional[str]:
     entry = _repo_cache(data, org, repo).get("gitlab", {}).get("project")
     if not isinstance(entry, dict) or not _is_fresh(entry.get("ts"), ttl):

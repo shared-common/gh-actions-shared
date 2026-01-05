@@ -83,7 +83,6 @@ This repo uses two on-runner caches under `${GITHUB_WORKSPACE}/.cache`:
 TTLs are controlled by repo variables:
 - `REPO_CACHE_TTL_DISCOVERY`: discovery cache TTL (seconds).
 - `REPO_CACHE_TTL_META`: repo metadata + ref SHA cache TTL (seconds).
-- `REPO_CACHE_TTL_NEGATIVE`: negative cache TTL for missing/not-a-fork/missing-ref (seconds).
 - `REPO_CACHE_TTL_GITLAB_PROJ`: GitLab project existence cache TTL (seconds).
 - `REPO_CACHE_TTL_GITLAB_BRANCH`: GitLab branch/protection cache TTL (seconds).
 
