@@ -55,7 +55,7 @@ jobs:
           matrix_file="${RUNNER_TEMP}/gitlab-matrix.json"
           export MATRIX_FILE="${matrix_file}"
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env PATH="${PATH}" MATRIX_FILE="${MATRIX_FILE}" \
+            env PATH="${PATH}" \
             /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
@@ -67,7 +67,7 @@ jobs:
               GL_GROUP_WIKI \
               GL_GROUP_ZDIVERGE \
               GL_GROUP_GENERAL \
-              ; .github/scripts/build_gitlab_matrix.sh'
+              ; .github/scripts/build_gitlab_matrix.sh "${MATRIX_FILE}"'
           {
             echo "matrix<<EOF"
             cat "$matrix_file"

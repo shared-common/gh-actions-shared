@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-output_path="${MATRIX_FILE:-${GITHUB_OUTPUT:-}}"
+output_path="${1:-${MATRIX_FILE:-${GITHUB_OUTPUT:-}}}"
 if [ -z "$output_path" ]; then
   echo "MATRIX_FILE or GITHUB_OUTPUT must be set" >&2
   exit 1
