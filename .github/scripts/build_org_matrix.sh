@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-.github/scripts/bws_export_env_unmasked.sh \
+sh .github/scripts/bws_export_env_unmasked.sh \
   GH_ORG_TBOX \
   GH_ORG_SECOPS \
   GH_ORG_WIKI \
