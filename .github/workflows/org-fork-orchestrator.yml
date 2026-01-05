@@ -57,13 +57,8 @@ jobs:
       - name: Build matrix
         id: build-matrix
         shell: bash
-        env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
-          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env GITHUB_OUTPUT="${GITHUB_OUTPUT}" PATH="${PATH}" /bin/sh -c '
-              python3 - <<'"'"'PY'"'"' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
 import json
 import os
 
@@ -78,7 +73,6 @@ if dupes:
 matrix = {"include": [{"github_org": org} for org in orgs]}
 print(f"matrix={json.dumps(matrix)}")
 PY
-            '
 
   orchestrate:
     needs: matrix
