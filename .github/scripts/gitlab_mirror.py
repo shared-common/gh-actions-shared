@@ -62,6 +62,8 @@ _REQUIRED_ENV = {
     "GL_GROUP_WIKI",
     "GL_GROUP_ZDIVERGE",
     "GL_GROUP_GENERAL",
+    "GITHUB_APP_TOKEN_FILE",
+    "GL_TOKEN_MCZFORKS_FILE",
 }
 
 
@@ -70,6 +72,36 @@ def _env(name: str) -> str:
     if value is None or value == "":
         raise ValueError(f"Missing required env var: {name}")
     return value
+
+
+
+
+def _secret_file_path(env_key: str, file_key: str) -> str:
+    direct = os.environ.get(env_key)
+    if direct:
+        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
+    path = os.environ.get(file_key)
+    if not path:
+        raise ValueError(f"Missing required env var: {file_key}")
+    return path
+
+
+def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
+    size = os.path.getsize(path)
+    if size > max_bytes:
+        raise ValueError(f"{label} file too large")
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().strip()
+
+
+def _github_token() -> str:
+    path = _secret_file_path("GITHUB_APP_TOKEN", "GITHUB_APP_TOKEN_FILE")
+    return _read_secret_file(path, "GITHUB_APP_TOKEN")
+
+
+def _gitlab_token() -> str:
+    path = _secret_file_path("GL_TOKEN_MCZFORKS", "GL_TOKEN_MCZFORKS_FILE")
+    return _read_secret_file(path, "GL_TOKEN_MCZFORKS")
 
 
 def _resolve_org_and_group() -> tuple[str, str, str]:
@@ -108,7 +140,7 @@ def load_config() -> GitLabConfig:
         github_staging_branch=_env("GH_BRANCH_STAGING"),
         github_feature_branch=_env("GH_BRANCH_FEATURE"),
         github_release_branch=_env("GH_BRANCH_RELEASE"),
-        gitlab_token=_env("GL_TOKEN_MCZFORKS"),
+        gitlab_token=_gitlab_token(),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
         gitlab_host=os.environ.get("GL_HOST", "gitlab.com"),
@@ -173,10 +205,7 @@ class GitLabApi:
 
 
 def _secrets_to_redact() -> List[str]:
-    candidates = [
-        os.environ.get("GITHUB_APP_TOKEN"),
-        os.environ.get("GL_TOKEN_MCZFORKS"),
-    ]
+    candidates = [_github_token(), _gitlab_token()]
     return [value for value in candidates if value]
 
 
@@ -448,7 +477,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
         # fetch source SHAs (full history to avoid shallow push rejection)
         for sha in (product_sha, staging_sha, feature_sha):
             if sha:
-                _run_git_with_token(["fetch", "origin", sha], os.environ["GITHUB_APP_TOKEN"], cwd=repo_dir)
+                _run_git_with_token(["fetch", "origin", sha], _github_token(), cwd=repo_dir)
 
         mirror_targets = {
             f"github/{product_ref}": product_sha,
@@ -601,7 +630,7 @@ def _preflight(api: GitHubApi, cfg: GitLabConfig) -> Dict[str, str]:
 
 
 def main() -> int:
-    token = _env("GITHUB_APP_TOKEN")
+    token = _github_token()
     cfg = load_config()
     _validate_branch_config(cfg)
     repo_filter = os.environ.get("INPUT_REPO") or None

@@ -45,6 +45,8 @@ _REQUIRED_ENV = {
     "GL_GROUP_WIKI",
     "GL_GROUP_ZDIVERGE",
     "GL_GROUP_GENERAL",
+    "GITHUB_APP_TOKEN_FILE",
+    "GL_TOKEN_MCZFORKS_FILE",
 }
 
 
@@ -108,6 +110,36 @@ def _env(name: str) -> str:
     return value
 
 
+
+
+def _secret_file_path(env_key: str, file_key: str) -> str:
+    direct = os.environ.get(env_key)
+    if direct:
+        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
+    path = os.environ.get(file_key)
+    if not path:
+        raise ValueError(f"Missing required env var: {file_key}")
+    return path
+
+
+def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
+    size = os.path.getsize(path)
+    if size > max_bytes:
+        raise ValueError(f"{label} file too large")
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().strip()
+
+
+def _github_token() -> str:
+    path = _secret_file_path("GITHUB_APP_TOKEN", "GITHUB_APP_TOKEN_FILE")
+    return _read_secret_file(path, "GITHUB_APP_TOKEN")
+
+
+def _gitlab_token() -> str:
+    path = _secret_file_path("GL_TOKEN_MCZFORKS", "GL_TOKEN_MCZFORKS_FILE")
+    return _read_secret_file(path, "GL_TOKEN_MCZFORKS")
+
+
 def _resolve_org_and_group() -> tuple[str, str, str]:
     org_map = {
         "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
@@ -141,7 +173,7 @@ def load_config() -> GitLabProtectionConfig:
         github_org=github_org,
         github_prefix=_env("GH_BRANCH_PREFIX"),
         github_staging_branch=_env("GH_BRANCH_STAGING"),
-        gitlab_token=_env("GL_TOKEN_MCZFORKS"),
+        gitlab_token=_gitlab_token(),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
         gitlab_host=os.environ.get("GL_HOST", "gitlab.com"),
@@ -278,7 +310,7 @@ def _summary_lines(results: List[Dict[str, Any]]) -> str:
 
 
 def main() -> int:
-    token = _env("GITHUB_APP_TOKEN")
+    token = _github_token()
     repo_filter = os.environ.get("INPUT_REPO") or None
     if repo_filter:
         repo_filter = repo_filter.strip() or None

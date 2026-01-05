@@ -25,6 +25,26 @@ def _env(name: str) -> str:
     return value
 
 
+
+
+def _secret_file_path(env_key: str, file_key: str) -> str:
+    direct = os.environ.get(env_key)
+    if direct:
+        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
+    path = os.environ.get(file_key)
+    if not path:
+        raise ValueError(f"Missing required env var: {file_key}")
+    return path
+
+
+def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
+    size = os.path.getsize(path)
+    if size > max_bytes:
+        raise ValueError(f"{label} file too large")
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().strip()
+
+
 def _issue_body(title: str, details: str) -> str:
     return (
         f"{title}\n\n"
@@ -328,7 +348,7 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
 
 
 def main() -> int:
-    token = _env("GITHUB_APP_TOKEN")
+    token = _read_secret_file(_secret_file_path("GITHUB_APP_TOKEN", "GITHUB_APP_TOKEN_FILE"), "GITHUB_APP_TOKEN")
     cfg = load_config()
     _validate_branch_config(cfg)
     repo_filter = os.environ.get("INPUT_REPO") or None

@@ -61,18 +61,27 @@ def _get_env(name: str) -> str:
     return value
 
 
-def _get_pem() -> str:
-    value = os.environ.get("GH_ORG_SHARED_PEM")
-    if value:
-        return value
-    pem_file = os.environ.get("GH_ORG_SHARED_PEM_FILE")
-    if not pem_file:
-        raise ValueError("Missing required env var: GH_ORG_SHARED_PEM")
-    size = os.path.getsize(pem_file)
-    if size > 64 * 1024:
-        raise ValueError("GH_ORG_SHARED_PEM file too large")
-    with open(pem_file, "r", encoding="utf-8") as handle:
+def _get_secret_file_path(env_key: str, file_key: str) -> str:
+    direct = os.environ.get(env_key)
+    if direct:
+        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
+    path = os.environ.get(file_key)
+    if not path:
+        raise ValueError(f"Missing required env var: {file_key}")
+    return path
+
+
+def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
+    size = os.path.getsize(path)
+    if size > max_bytes:
+        raise ValueError(f"{label} file too large")
+    with open(path, "r", encoding="utf-8") as handle:
         return handle.read()
+
+
+def _get_pem() -> str:
+    pem_file = _get_secret_file_path("GH_ORG_SHARED_PEM", "GH_ORG_SHARED_PEM_FILE")
+    return _read_secret_file(pem_file, "GH_ORG_SHARED_PEM")
 
 
 def _resolve_org() -> str:
