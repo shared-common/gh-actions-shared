@@ -207,7 +207,11 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
         result["notes"] = ["Skipped: not a fork or missing upstream"]
         return result
 
-    mirror = _select_mirror_branch(api, owner, name)
+    try:
+        mirror = _select_mirror_branch(api, owner, name)
+    except GitHubApiError as exc:
+        result["notes"] = [f"Skipped: missing mirror branch ({exc.status})"]
+        return result
     result["mirror_branch"] = mirror
     product = cfg.product_ref
     staging = cfg.staging_ref
