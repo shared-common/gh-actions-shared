@@ -54,7 +54,7 @@ jobs:
         run: |
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
-            /bin/sh -c '.github/scripts/bws_export_env_unmasked.sh \
+            /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \

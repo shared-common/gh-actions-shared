@@ -1,5 +1,10 @@
 #!/bin/sh
-set -eu
+set -e
+
+if [ -z "${GITHUB_OUTPUT:-}" ]; then
+  echo "GITHUB_OUTPUT is not set" >&2
+  exit 1
+fi
 
 python3 - <<'PY' >> "${GITHUB_OUTPUT:?}"
 import json
