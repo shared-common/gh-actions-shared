@@ -120,7 +120,10 @@ def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
     if size > max_bytes:
         raise ValueError(f"{label} file too large")
     with open(path, "r", encoding="utf-8") as handle:
-        return handle.read().strip()
+        value = handle.read().strip()
+    if not value:
+        raise ValueError(f"{label} file is empty")
+    return value
 
 
 def _github_token() -> str:

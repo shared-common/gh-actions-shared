@@ -84,7 +84,10 @@ def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
     if size > max_bytes:
         raise ValueError(f"{label} file too large")
     with open(path, "r", encoding="utf-8") as handle:
-        return handle.read().strip()
+        value = handle.read().strip()
+    if not value:
+        raise ValueError(f"{label} file is empty")
+    return value
 
 
 def _github_token() -> str:
@@ -259,9 +262,9 @@ def _run_git_with_token(args: List[str], token: str, cwd: Optional[str] = None) 
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
     basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("utf-8")
-    env["GIT_HTTP_EXTRAHEADER"] = f"Authorization: Basic {basic}"
+    env["GIT_ASKPASS"] = "/bin/false"
     result = subprocess.run(
-        ["git", *args],
+        ["git", "-c", f"http.extraHeader=Authorization: Basic {basic}", *args],
         cwd=cwd,
         env=env,
         check=False,
@@ -281,9 +284,9 @@ def _run_git_with_gitlab_token(args: List[str], token: str, cwd: Optional[str] =
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
     basic = base64.b64encode(f"oauth2:{token}".encode("utf-8")).decode("utf-8")
-    env["GIT_HTTP_EXTRAHEADER"] = f"Authorization: Basic {basic}"
+    env["GIT_ASKPASS"] = "/bin/false"
     result = subprocess.run(
-        ["git", *args],
+        ["git", "-c", f"http.extraHeader=Authorization: Basic {basic}", *args],
         cwd=cwd,
         env=env,
         check=False,
