@@ -36,12 +36,15 @@ class GitLabProtectionConfig:
 
 
 _REQUIRED_ENV = {
-    "GH_ORG_UPSTREAM",
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_STAGING",
     "GL_TOKEN_MCZFORKS",
     "GL_GROUP_ZFORKS",
-    "GL_GROUP_UPSTREAM",
+    "GL_GROUP_TBOX",
+    "GL_GROUP_SECOPS",
+    "GL_GROUP_WIKI",
+    "GL_GROUP_ZDIVERGE",
+    "GL_GROUP_GENERAL",
 }
 
 
@@ -105,17 +108,42 @@ def _env(name: str) -> str:
     return value
 
 
+def _resolve_org_and_group() -> tuple[str, str, str]:
+    org_map = {
+        "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
+        "GH_ORG_SECOPS": ("GL_GROUP_ZFORKS", "GL_GROUP_SECOPS"),
+        "GH_ORG_WIKI": ("GL_GROUP_ZFORKS", "GL_GROUP_WIKI"),
+        "GH_ORG_DIVERGE": ("GL_GROUP_ZDIVERGE", "GL_GROUP_GENERAL"),
+    }
+    org_values = {key: os.environ.get(key, "").strip() for key in org_map}
+    active_orgs = {key: value for key, value in org_values.items() if value}
+    if not active_orgs:
+        raise ValueError("Missing required org value")
+    if len(active_orgs) > 1:
+        raise ValueError(f"Multiple org values set: {', '.join(sorted(active_orgs.keys()))}")
+    org_key, github_org = next(iter(active_orgs.items()))
+    group_key, subgroup_key = org_map[org_key]
+    gitlab_group = os.environ.get(group_key, "").strip()
+    gitlab_subgroup = os.environ.get(subgroup_key, "").strip()
+    if not gitlab_group:
+        raise ValueError(f"Missing required gitlab group value: {group_key}")
+    if not gitlab_subgroup:
+        raise ValueError(f"Missing required gitlab subgroup value: {subgroup_key}")
+    return github_org, gitlab_group, gitlab_subgroup
+
+
 def load_config() -> GitLabProtectionConfig:
+    github_org, gitlab_group, gitlab_subgroup = _resolve_org_and_group()
     missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return GitLabProtectionConfig(
-        github_org=_env("GH_ORG_UPSTREAM"),
+        github_org=github_org,
         github_prefix=_env("GH_BRANCH_PREFIX"),
         github_staging_branch=_env("GH_BRANCH_STAGING"),
         gitlab_token=_env("GL_TOKEN_MCZFORKS"),
-        gitlab_group=_env("GL_GROUP_ZFORKS"),
-        gitlab_subgroup=_env("GL_GROUP_UPSTREAM"),
+        gitlab_group=gitlab_group,
+        gitlab_subgroup=gitlab_subgroup,
         gitlab_host=os.environ.get("GL_HOST", "gitlab.com"),
     )
 

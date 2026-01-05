@@ -38,7 +38,6 @@ class Config:
 
 
 _REQUIRED_ENV = {
-    "GH_ORG_UPSTREAM",
     "GH_ORG_SHARED_APP_ID",
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_PRODUCT",
@@ -46,6 +45,13 @@ _REQUIRED_ENV = {
     "GH_BRANCH_SNAPSHOT",
     "GH_BRANCH_FEATURE",
 }
+
+_ORG_KEYS = (
+    "GH_ORG_TBOX",
+    "GH_ORG_SECOPS",
+    "GH_ORG_WIKI",
+    "GH_ORG_DIVERGE",
+)
 
 
 def _get_env(name: str) -> str:
@@ -69,12 +75,23 @@ def _get_pem() -> str:
         return handle.read()
 
 
+def _resolve_org() -> str:
+    values = {key: os.environ.get(key, "").strip() for key in _ORG_KEYS}
+    active = {key: value for key, value in values.items() if value}
+    if not active:
+        raise ValueError("Missing required org value")
+    if len(active) > 1:
+        raise ValueError(f"Multiple org values set: {', '.join(sorted(active.keys()))}")
+    return next(iter(active.values()))
+
+
 def load_config() -> Config:
+    org = _resolve_org()
     missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return Config(
-        org=_get_env("GH_ORG_UPSTREAM"),
+        org=org,
         app_id=_get_env("GH_ORG_SHARED_APP_ID"),
         app_pem=_get_pem(),
         branch_prefix=_get_env("GH_BRANCH_PREFIX"),

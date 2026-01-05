@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: org-fork-orchestrator-${{ github.ref }}-${{ inputs.repo || 'all' }}
+  cancel-in-progress: false
+
 jobs:
   matrix:
     runs-on: ubuntu-24.04
@@ -23,9 +27,6 @@ jobs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install bws CLI
         uses: ./.github/actions/install-bws
         with:
@@ -33,14 +34,21 @@ jobs:
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
       - name: Load BWS config
+        id: bws
         shell: bash
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env GITHUB_ENV="${GITHUB_ENV}" \
-            /bin/sh .github/scripts/bws_export_env.sh \
+            env GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
+            /bin/sh .github/scripts/bws_export_output.sh \
+              GH_ORG_SHARED_APP_ID \
+              GH_BRANCH_PREFIX \
+              GH_BRANCH_PRODUCT \
+              GH_BRANCH_STAGING \
+              GH_BRANCH_SNAPSHOT \
+              GH_BRANCH_FEATURE \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \
@@ -49,8 +57,13 @@ jobs:
       - name: Build matrix
         id: build-matrix
         shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+            env GITHUB_OUTPUT="${GITHUB_OUTPUT}" PATH="${PATH}" /bin/sh -c '
+              python3 - <<'"'"'PY'"'"' >> "$GITHUB_OUTPUT"
 import json
 import os
 
@@ -59,9 +72,13 @@ orgs = [os.environ.get(key, "").strip() for key in org_keys]
 missing = [key for key, value in zip(org_keys, orgs) if not value]
 if missing:
     raise SystemExit(f"Missing orgs in env: {', '.join(missing)}")
+dupes = sorted({org for org in orgs if orgs.count(org) > 1})
+if dupes:
+    raise SystemExit(f"Duplicate org entries: {', '.join(dupes)}")
 matrix = {"include": [{"github_org": org} for org in orgs]}
 print(f"matrix={json.dumps(matrix)}")
 PY
+            '
 
   orchestrate:
     needs: matrix
@@ -71,8 +88,9 @@ PY
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    env:
-      GH_ORG_UPSTREAM: ${{ matrix.github_org }}
+    concurrency:
+      group: org-fork-orchestrator-${{ matrix.github_org }}
+      cancel-in-progress: false
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -84,21 +102,12 @@ PY
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
-      - name: Load BWS secrets
+      - name: Write app key
         shell: bash
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
-          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env GITHUB_ENV="${GITHUB_ENV}" \
-            /bin/sh .github/scripts/bws_export_env.sh \
-              GH_ORG_SHARED_APP_ID \
-              GH_BRANCH_PREFIX \
-              GH_BRANCH_PRODUCT \
-              GH_BRANCH_STAGING \
-              GH_BRANCH_SNAPSHOT \
-              GH_BRANCH_FEATURE
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             /bin/sh .github/scripts/bws_export_secret_file.sh \
               GH_ORG_SHARED_PEM \
@@ -124,9 +133,9 @@ PY
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ env.GH_ORG_SHARED_APP_ID }}
+          app-id: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
           private-key: ${{ steps.app-key.outputs.private_key }}
-          owner: ${{ env.GH_ORG_UPSTREAM }}
+          owner: ${{ matrix.github_org }}
           repositories: ${{ inputs.repo }}
 
 
@@ -134,17 +143,25 @@ PY
         env:
           GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
           INPUT_REPO: ${{ inputs.repo }}
-          GH_ORG_UPSTREAM: ${{ env.GH_ORG_UPSTREAM }}
           GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/gh-app-key.pem
-          GH_BRANCH_PREFIX: ${{ env.GH_BRANCH_PREFIX }}
-          GH_BRANCH_PRODUCT: ${{ env.GH_BRANCH_PRODUCT }}
-          GH_BRANCH_STAGING: ${{ env.GH_BRANCH_STAGING }}
-          GH_BRANCH_SNAPSHOT: ${{ env.GH_BRANCH_SNAPSHOT }}
-          GH_BRANCH_FEATURE: ${{ env.GH_BRANCH_FEATURE }}
+          GH_ORG_SHARED_APP_ID: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
+          GH_BRANCH_PREFIX: ${{ steps.bws.outputs.GH_BRANCH_PREFIX }}
+          GH_BRANCH_PRODUCT: ${{ steps.bws.outputs.GH_BRANCH_PRODUCT }}
+          GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
+          GH_BRANCH_SNAPSHOT: ${{ steps.bws.outputs.GH_BRANCH_SNAPSHOT }}
+          GH_BRANCH_FEATURE: ${{ steps.bws.outputs.GH_BRANCH_FEATURE }}
+          GH_ORG_TBOX: ${{ steps.bws.outputs.GH_ORG_TBOX }}
+          GH_ORG_SECOPS: ${{ steps.bws.outputs.GH_ORG_SECOPS }}
+          GH_ORG_WIKI: ${{ steps.bws.outputs.GH_ORG_WIKI }}
+          GH_ORG_DIVERGE: ${{ steps.bws.outputs.GH_ORG_DIVERGE }}
         run: |
           python3 .github/scripts/orchestrator.py
 
-      - name: Cleanup app key
+      - name: Post cleanup
         if: always()
+        shell: bash
         run: |
           rm -f "${RUNNER_TEMP}/gh-app-key.pem"
+          for key in GH_ORG_SHARED_PEM_FILE GITHUB_APP_TOKEN; do
+            printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
+          done

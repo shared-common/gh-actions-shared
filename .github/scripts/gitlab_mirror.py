@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import base64
 import subprocess
 import tempfile
 import time
@@ -49,7 +50,6 @@ class GitLabConfig:
 
 
 _REQUIRED_ENV = {
-    "GH_ORG_UPSTREAM",
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_PRODUCT",
     "GH_BRANCH_STAGING",
@@ -57,7 +57,11 @@ _REQUIRED_ENV = {
     "GH_BRANCH_RELEASE",
     "GL_TOKEN_MCZFORKS",
     "GL_GROUP_ZFORKS",
-    "GL_GROUP_UPSTREAM",
+    "GL_GROUP_TBOX",
+    "GL_GROUP_SECOPS",
+    "GL_GROUP_WIKI",
+    "GL_GROUP_ZDIVERGE",
+    "GL_GROUP_GENERAL",
 }
 
 
@@ -68,20 +72,45 @@ def _env(name: str) -> str:
     return value
 
 
+def _resolve_org_and_group() -> tuple[str, str, str]:
+    org_map = {
+        "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
+        "GH_ORG_SECOPS": ("GL_GROUP_ZFORKS", "GL_GROUP_SECOPS"),
+        "GH_ORG_WIKI": ("GL_GROUP_ZFORKS", "GL_GROUP_WIKI"),
+        "GH_ORG_DIVERGE": ("GL_GROUP_ZDIVERGE", "GL_GROUP_GENERAL"),
+    }
+    org_values = {key: os.environ.get(key, "").strip() for key in org_map}
+    active_orgs = {key: value for key, value in org_values.items() if value}
+    if not active_orgs:
+        raise ValueError("Missing required org value")
+    if len(active_orgs) > 1:
+        raise ValueError(f"Multiple org values set: {', '.join(sorted(active_orgs.keys()))}")
+    org_key, github_org = next(iter(active_orgs.items()))
+    group_key, subgroup_key = org_map[org_key]
+    gitlab_group = os.environ.get(group_key, "").strip()
+    gitlab_subgroup = os.environ.get(subgroup_key, "").strip()
+    if not gitlab_group:
+        raise ValueError(f"Missing required gitlab group value: {group_key}")
+    if not gitlab_subgroup:
+        raise ValueError(f"Missing required gitlab subgroup value: {subgroup_key}")
+    return github_org, gitlab_group, gitlab_subgroup
+
+
 def load_config() -> GitLabConfig:
+    github_org, gitlab_group, gitlab_subgroup = _resolve_org_and_group()
     missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return GitLabConfig(
-        github_org=_env("GH_ORG_UPSTREAM"),
+        github_org=github_org,
         github_prefix=_env("GH_BRANCH_PREFIX"),
         github_product_branch=_env("GH_BRANCH_PRODUCT"),
         github_staging_branch=_env("GH_BRANCH_STAGING"),
         github_feature_branch=_env("GH_BRANCH_FEATURE"),
         github_release_branch=_env("GH_BRANCH_RELEASE"),
         gitlab_token=_env("GL_TOKEN_MCZFORKS"),
-        gitlab_group=_env("GL_GROUP_ZFORKS"),
-        gitlab_subgroup=_env("GL_GROUP_UPSTREAM"),
+        gitlab_group=gitlab_group,
+        gitlab_subgroup=gitlab_subgroup,
         gitlab_host=os.environ.get("GL_HOST", "gitlab.com"),
     )
 
@@ -178,12 +207,56 @@ def _run_git(args: List[str], cwd: Optional[str] = None) -> str:
     return stdout
 
 
+def _run_git_with_token(args: List[str], token: str, cwd: Optional[str] = None) -> str:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("utf-8")
+    env["GIT_HTTP_EXTRAHEADER"] = f"Authorization: Basic {basic}"
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=env,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    secrets = _secrets_to_redact()
+    stdout = _redact(result.stdout.strip(), secrets)
+    stderr = _redact(result.stderr.strip(), secrets)
+    if result.returncode != 0:
+        raise GitCommandError(stderr or stdout)
+    return stdout
+
+
+def _run_git_with_gitlab_token(args: List[str], token: str, cwd: Optional[str] = None) -> str:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    basic = base64.b64encode(f"oauth2:{token}".encode("utf-8")).decode("utf-8")
+    env["GIT_HTTP_EXTRAHEADER"] = f"Authorization: Basic {basic}"
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=env,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    secrets = _secrets_to_redact()
+    stdout = _redact(result.stdout.strip(), secrets)
+    stderr = _redact(result.stderr.strip(), secrets)
+    if result.returncode != 0:
+        raise GitCommandError(stderr or stdout)
+    return stdout
+
+
 def _gitlab_url(cfg: GitLabConfig, repo: str) -> str:
-    return f"https://oauth2:{cfg.gitlab_token}@{cfg.gitlab_host}/{cfg.gitlab_project_path(repo)}"
+    return f"https://{cfg.gitlab_host}/{cfg.gitlab_project_path(repo)}"
 
 
-def _github_url(token: str, org: str, repo: str) -> str:
-    return f"https://x-access-token:{token}@github.com/{org}/{repo}.git"
+def _github_url(org: str, repo: str) -> str:
+    return f"https://github.com/{org}/{repo}.git"
 
 
 def _gitlab_project_id(cfg: GitLabConfig, repo: str) -> str:
@@ -366,7 +439,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
     with tempfile.TemporaryDirectory(prefix=f"gitlab-mirror-{name}-") as repo_dir:
         _run_git(["init", "--bare"], cwd=repo_dir)
 
-        github_remote = _github_url(os.environ["GITHUB_APP_TOKEN"], owner, name)
+        github_remote = _github_url(owner, name)
         gitlab_remote = _gitlab_url(cfg, name)
 
         _run_git(["remote", "add", "origin", github_remote], cwd=repo_dir)
@@ -375,7 +448,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
         # fetch source SHAs (full history to avoid shallow push rejection)
         for sha in (product_sha, staging_sha, feature_sha):
             if sha:
-                _fetch_sha("origin", sha, repo_dir)
+                _run_git_with_token(["fetch", "origin", sha], os.environ["GITHUB_APP_TOKEN"], cwd=repo_dir)
 
         mirror_targets = {
             f"github/{product_ref}": product_sha,
@@ -404,7 +477,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
             remote_sha = _ls_remote(gitlab_remote, target_ref)
             if remote_sha:
                 try:
-                    _fetch_ref("gitlab", target_ref, repo_dir)
+                    _run_git_with_gitlab_token(["fetch", "gitlab", target_ref], cfg.gitlab_token, cwd=repo_dir)
                 except GitCommandError as exc:
                     mirror_results[target_ref] = f"skipped: fetch failed ({exc})"
                     continue
@@ -412,7 +485,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
                     mirror_results[target_ref] = "skipped: diverged"
                     continue
             try:
-                _push_ref(repo_dir, "gitlab", sha, target_ref)
+                _run_git_with_gitlab_token(["push", "gitlab", f"{sha}:refs/heads/{target_ref}"], cfg.gitlab_token, cwd=repo_dir)
                 mirror_results[target_ref] = "updated" if remote_sha else "created"
             except GitCommandError as exc:
                 mirror_results[target_ref] = f"failed: {exc}"
@@ -428,7 +501,7 @@ def process_repo(api: GitHubApi, cfg: GitLabConfig, repo: Dict[str, Any]) -> Dic
                 dev_results[target_ref] = "exists"
                 continue
             try:
-                _push_ref(repo_dir, "gitlab", sha, target_ref)
+                _run_git_with_gitlab_token(["push", "gitlab", f"{sha}:refs/heads/{target_ref}"], cfg.gitlab_token, cwd=repo_dir)
                 dev_results[target_ref] = "created"
             except GitCommandError as exc:
                 dev_results[target_ref] = f"failed: {exc}"
