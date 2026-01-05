@@ -1,12 +1,13 @@
 #!/bin/sh
 set -e
 
-if [ -z "${GITHUB_OUTPUT:-}" ]; then
-  echo "GITHUB_OUTPUT is not set" >&2
+output_path="${MATRIX_FILE:-${GITHUB_OUTPUT:-}}"
+if [ -z "$output_path" ]; then
+  echo "MATRIX_FILE or GITHUB_OUTPUT must be set" >&2
   exit 1
 fi
 
-python3 - <<'PY' >> "${GITHUB_OUTPUT:?}"
+python3 - <<'PY' >> "$output_path"
 import json
 import os
 
@@ -52,5 +53,8 @@ matrix = {
         },
     ]
 }
-print(f"matrix={json.dumps(matrix)}")
+if os.environ.get("MATRIX_FILE"):
+    print(json.dumps(matrix))
+else:
+    print(f"matrix={json.dumps(matrix)}")
 PY
