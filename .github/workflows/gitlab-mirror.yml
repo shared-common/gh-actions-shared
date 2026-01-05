@@ -52,9 +52,8 @@ jobs:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
-          matrix_file="${RUNNER_TEMP}/gitlab-matrix.json"
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env PATH="${PATH}" MATRIX_FILE="${matrix_file}" \
+            env PATH="${PATH}" \
             /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
@@ -66,12 +65,7 @@ jobs:
               GL_GROUP_WIKI \
               GL_GROUP_ZDIVERGE \
               GL_GROUP_GENERAL \
-              ; .github/scripts/build_gitlab_matrix.sh'
-          {
-            echo "matrix<<EOF"
-            cat "$matrix_file"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+              ; .github/scripts/build_gitlab_matrix.sh' | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   mirror:
     needs: matrix
