@@ -57,26 +57,14 @@ jobs:
             printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-import json
-import os
-
-matrix_json = os.environ.get("MATRIX_JSON", "")
-try:
-    data = json.loads(matrix_json)
-except json.JSONDecodeError as exc:
-    raise SystemExit(f"Invalid matrix JSON: {exc}") from exc
-org = os.environ.get("INPUT_ORG", "").strip()
-if not org:
-    raise SystemExit("INPUT_ORG is empty")
-include = data.get("include") if isinstance(data, dict) else None
-if not isinstance(include, list):
-    raise SystemExit("Matrix include list is missing")
-filtered = [item for item in include if isinstance(item, dict) and item.get("github_org") == org]
-if not filtered:
-    raise SystemExit(f"Unknown org: {org}")
-print(f"matrix={json.dumps({'include': filtered})}")
-PY
+          python3 -c 'import json,os,sys; matrix_json=os.environ.get("MATRIX_JSON",""); \
+            data=json.loads(matrix_json); org=os.environ.get("INPUT_ORG","").strip(); \
+            include=data.get("include") if isinstance(data,dict) else None; \
+            (include is not None and isinstance(include,list)) or sys.exit("Matrix include list is missing"); \
+            org or sys.exit("INPUT_ORG is empty"); \
+            filtered=[item for item in include if isinstance(item,dict) and item.get("github_org")==org]; \
+            filtered or sys.exit(f"Unknown org: {org}"); \
+            print(f"matrix={json.dumps({'\''include'\'': filtered})}")' >> "$GITHUB_OUTPUT"
 
   clear:
     needs: matrix
