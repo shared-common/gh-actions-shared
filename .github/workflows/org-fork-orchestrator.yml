@@ -60,6 +60,11 @@ jobs:
       - name: Build matrix
         id: build-matrix
         shell: bash
+        env:
+          GH_ORG_TBOX: ${{ steps.bws.outputs.GH_ORG_TBOX }}
+          GH_ORG_SECOPS: ${{ steps.bws.outputs.GH_ORG_SECOPS }}
+          GH_ORG_WIKI: ${{ steps.bws.outputs.GH_ORG_WIKI }}
+          GH_ORG_DIVERGE: ${{ steps.bws.outputs.GH_ORG_DIVERGE }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
