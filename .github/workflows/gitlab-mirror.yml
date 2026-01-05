@@ -53,8 +53,9 @@ jobs:
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           matrix_file="${RUNNER_TEMP}/gitlab-matrix.json"
+          export MATRIX_FILE="${matrix_file}"
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env PATH="${PATH}" MATRIX_FILE="${matrix_file}" \
+            env PATH="${PATH}" MATRIX_FILE="${MATRIX_FILE}" \
             /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
