@@ -59,6 +59,7 @@ jobs:
 
   orchestrate:
     needs: matrix
+    name: Orchestrate (${{ matrix.github_org }})
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
