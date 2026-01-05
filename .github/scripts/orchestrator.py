@@ -78,11 +78,21 @@ def _ref_sha_optional(api: GitHubApi, owner: str, repo: str, ref: str) -> Option
         raise
 
 
-def _select_mirror_branch(api: GitHubApi, owner: str, repo: str) -> str:
+def _select_mirror_branch(api: GitHubApi, owner: str, repo: str, repo_details: Dict[str, Any]) -> str:
+    parent = repo_details.get("parent")
+    if isinstance(parent, dict):
+        parent_default = parent.get("default_branch")
+        if isinstance(parent_default, str) and parent_default:
+            if _ref_sha_optional(api, owner, repo, parent_default):
+                return parent_default
+    repo_default = repo_details.get("default_branch")
+    if isinstance(repo_default, str) and repo_default:
+        if _ref_sha_optional(api, owner, repo, repo_default):
+            return repo_default
     for candidate in ("main", "master"):
         if _ref_sha_optional(api, owner, repo, candidate):
             return candidate
-    raise GitHubApiError(404, "Missing both main and master mirror branches")
+    raise GitHubApiError(404, "Missing mirror branch (default/main/master)")
 
 
 def _parent_sha(api: GitHubApi, owner: str, repo: str, sha: str) -> Optional[str]:
@@ -172,7 +182,7 @@ def process_repo(
         return result
 
     try:
-        mirror = _select_mirror_branch(api, owner, name)
+        mirror = _select_mirror_branch(api, owner, name, repo_details)
     except GitHubApiError as exc:
         result["notes"] = [f"Skipped: missing mirror branch ({exc.status})"]
         return result
