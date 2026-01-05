@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       clear_cache:
-        description: "Clear repo discovery cache before running"
+        description: "Clear all caches and regenerate fresh data"
         required: false
         type: boolean
         default: false
@@ -306,6 +306,29 @@ jobs:
           GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
         run: |
           python3 .github/scripts/orchestrator.py
+
+      - name: Cache TTL summary
+        if: always()
+        shell: bash
+        env:
+          TTL_DISCOVERY: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_DISCOVERY || '3600' }}
+          TTL_META: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_META || '800' }}
+          TTL_NEGATIVE: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_NEGATIVE || '1800' }}
+          TTL_GITLAB_PROJ: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_PROJ || '21600' }}
+          TTL_GITLAB_BRANCH: ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_GITLAB_BRANCH || '900' }}
+        run: |
+          set -euo pipefail
+          summary_path="${GITHUB_STEP_SUMMARY:-}"
+          if [ -n "$summary_path" ]; then
+            {
+              printf '## Cache TTLs\n'
+              printf -- '- discovery: `%s`\n' "$TTL_DISCOVERY"
+              printf -- '- meta: `%s`\n' "$TTL_META"
+              printf -- '- negative: `%s`\n' "$TTL_NEGATIVE"
+              printf -- '- gitlab_project: `%s`\n' "$TTL_GITLAB_PROJ"
+              printf -- '- gitlab_branch: `%s`\n' "$TTL_GITLAB_BRANCH"
+            } >> "$summary_path"
+          fi
 
       - name: Ensure repo cache files
         if: always()
