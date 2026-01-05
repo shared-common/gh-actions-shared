@@ -1,5 +1,5 @@
 # gh-actions: Org Fork Orchestrator
-.
+
 Centralized GitHub Actions automation for keeping forked repos in sync without installing workflows in each fork.
 
 ## What it does
