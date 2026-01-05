@@ -188,16 +188,16 @@ jobs:
           GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
           GH_BRANCH_FEATURE: ${{ steps.bws.outputs.GH_BRANCH_FEATURE }}
           GH_BRANCH_RELEASE: ${{ steps.bws.outputs.GH_BRANCH_RELEASE }}
-          GH_ORG_TBOX: ${{ steps.bws.outputs.GH_ORG_TBOX }}
-          GH_ORG_SECOPS: ${{ steps.bws.outputs.GH_ORG_SECOPS }}
-          GH_ORG_WIKI: ${{ steps.bws.outputs.GH_ORG_WIKI }}
-          GH_ORG_DIVERGE: ${{ steps.bws.outputs.GH_ORG_DIVERGE }}
-          GL_GROUP_ZFORKS: ${{ steps.bws.outputs.GL_GROUP_ZFORKS }}
-          GL_GROUP_TBOX: ${{ steps.bws.outputs.GL_GROUP_TBOX }}
-          GL_GROUP_SECOPS: ${{ steps.bws.outputs.GL_GROUP_SECOPS }}
-          GL_GROUP_WIKI: ${{ steps.bws.outputs.GL_GROUP_WIKI }}
-          GL_GROUP_ZDIVERGE: ${{ steps.bws.outputs.GL_GROUP_ZDIVERGE }}
-          GL_GROUP_GENERAL: ${{ steps.bws.outputs.GL_GROUP_GENERAL }}
+          GH_ORG_TBOX: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_TBOX && steps.bws.outputs.GH_ORG_TBOX || '' }}
+          GH_ORG_SECOPS: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_SECOPS && steps.bws.outputs.GH_ORG_SECOPS || '' }}
+          GH_ORG_WIKI: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_WIKI && steps.bws.outputs.GH_ORG_WIKI || '' }}
+          GH_ORG_DIVERGE: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_DIVERGE && steps.bws.outputs.GH_ORG_DIVERGE || '' }}
+          GL_GROUP_ZFORKS: ${{ matrix.gitlab_group == steps.bws.outputs.GL_GROUP_ZFORKS && steps.bws.outputs.GL_GROUP_ZFORKS || '' }}
+          GL_GROUP_TBOX: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_TBOX && steps.bws.outputs.GL_GROUP_TBOX || '' }}
+          GL_GROUP_SECOPS: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_SECOPS && steps.bws.outputs.GL_GROUP_SECOPS || '' }}
+          GL_GROUP_WIKI: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_WIKI && steps.bws.outputs.GL_GROUP_WIKI || '' }}
+          GL_GROUP_ZDIVERGE: ${{ matrix.gitlab_group == steps.bws.outputs.GL_GROUP_ZDIVERGE && steps.bws.outputs.GL_GROUP_ZDIVERGE || '' }}
+          GL_GROUP_GENERAL: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_GENERAL && steps.bws.outputs.GL_GROUP_GENERAL || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
           REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
@@ -212,16 +212,16 @@ jobs:
           GH_BRANCH_PREFIX: ${{ steps.bws.outputs.GH_BRANCH_PREFIX }}
           GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
           GH_BRANCH_RELEASE: ${{ steps.bws.outputs.GH_BRANCH_RELEASE }}
-          GH_ORG_TBOX: ${{ steps.bws.outputs.GH_ORG_TBOX }}
-          GH_ORG_SECOPS: ${{ steps.bws.outputs.GH_ORG_SECOPS }}
-          GH_ORG_WIKI: ${{ steps.bws.outputs.GH_ORG_WIKI }}
-          GH_ORG_DIVERGE: ${{ steps.bws.outputs.GH_ORG_DIVERGE }}
-          GL_GROUP_ZFORKS: ${{ steps.bws.outputs.GL_GROUP_ZFORKS }}
-          GL_GROUP_TBOX: ${{ steps.bws.outputs.GL_GROUP_TBOX }}
-          GL_GROUP_SECOPS: ${{ steps.bws.outputs.GL_GROUP_SECOPS }}
-          GL_GROUP_WIKI: ${{ steps.bws.outputs.GL_GROUP_WIKI }}
-          GL_GROUP_ZDIVERGE: ${{ steps.bws.outputs.GL_GROUP_ZDIVERGE }}
-          GL_GROUP_GENERAL: ${{ steps.bws.outputs.GL_GROUP_GENERAL }}
+          GH_ORG_TBOX: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_TBOX && steps.bws.outputs.GH_ORG_TBOX || '' }}
+          GH_ORG_SECOPS: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_SECOPS && steps.bws.outputs.GH_ORG_SECOPS || '' }}
+          GH_ORG_WIKI: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_WIKI && steps.bws.outputs.GH_ORG_WIKI || '' }}
+          GH_ORG_DIVERGE: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_DIVERGE && steps.bws.outputs.GH_ORG_DIVERGE || '' }}
+          GL_GROUP_ZFORKS: ${{ matrix.gitlab_group == steps.bws.outputs.GL_GROUP_ZFORKS && steps.bws.outputs.GL_GROUP_ZFORKS || '' }}
+          GL_GROUP_TBOX: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_TBOX && steps.bws.outputs.GL_GROUP_TBOX || '' }}
+          GL_GROUP_SECOPS: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_SECOPS && steps.bws.outputs.GL_GROUP_SECOPS || '' }}
+          GL_GROUP_WIKI: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_WIKI && steps.bws.outputs.GL_GROUP_WIKI || '' }}
+          GL_GROUP_ZDIVERGE: ${{ matrix.gitlab_group == steps.bws.outputs.GL_GROUP_ZDIVERGE && steps.bws.outputs.GL_GROUP_ZDIVERGE || '' }}
+          GL_GROUP_GENERAL: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_GENERAL && steps.bws.outputs.GL_GROUP_GENERAL || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
           REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
