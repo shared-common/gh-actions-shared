@@ -1,0 +1,33 @@
+name: Install bws CLI
+description: Download and install Bitwarden Secrets Manager CLI with checksum verification.
+inputs:
+  version:
+    description: bws CLI version (e.g., 1.0.0)
+    required: true
+  sha256:
+    description: SHA256 checksum for the release zip
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install bws
+      shell: bash
+      env:
+        BWS_VERSION: ${{ inputs.version }}
+        BWS_SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+        if command -v bws >/dev/null 2>&1; then
+          installed_version="$(bws --version 2>/dev/null | awk '{print $NF}')"
+          if [ "${installed_version}" = "${BWS_VERSION}" ]; then
+            echo "bws ${BWS_VERSION} already installed"
+            exit 0
+          fi
+        fi
+        url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+        tmp_dir="$(mktemp -d)"
+        curl -fL --retry 3 --retry-delay 1 -o "${tmp_dir}/bws.zip" "${url}"
+        echo "${BWS_SHA256}  ${tmp_dir}/bws.zip" | sha256sum -c -
+        unzip -q "${tmp_dir}/bws.zip" -d "${tmp_dir}"
+        install -m 0755 "${tmp_dir}/bws" /usr/local/bin/bws
+        rm -rf "${tmp_dir}"

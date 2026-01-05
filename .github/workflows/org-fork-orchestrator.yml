@@ -1,0 +1,150 @@
+name: Org Fork Orchestrator
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+    - cron: "17 23 * * *"
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Optional single fork repo name to target"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bws CLI
+        uses: ./.github/actions/install-bws
+        with:
+          version: "1.0.0"
+          sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
+
+      - name: Load BWS config
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+        run: |
+          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+            env GITHUB_ENV="${GITHUB_ENV}" \
+            /bin/sh .github/scripts/bws_export_env.sh \
+              GH_ORG_TBOX \
+              GH_ORG_SECOPS \
+              GH_ORG_WIKI \
+              GH_ORG_DIVERGE
+
+      - name: Build matrix
+        id: build-matrix
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+import json
+import os
+
+org_keys = ("GH_ORG_TBOX", "GH_ORG_SECOPS", "GH_ORG_WIKI", "GH_ORG_DIVERGE")
+orgs = [os.environ.get(key, "").strip() for key in org_keys]
+missing = [key for key, value in zip(org_keys, orgs) if not value]
+if missing:
+    raise SystemExit(f"Missing orgs in env: {', '.join(missing)}")
+matrix = {"include": [{"github_org": org} for org in orgs]}
+print(f"matrix={json.dumps(matrix)}")
+PY
+
+  orchestrate:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GH_ORG_UPSTREAM: ${{ matrix.github_org }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bws CLI
+        uses: ./.github/actions/install-bws
+        with:
+          version: "1.0.0"
+          sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
+
+      - name: Load BWS secrets
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+        run: |
+          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+            env GITHUB_ENV="${GITHUB_ENV}" \
+            /bin/sh .github/scripts/bws_export_env.sh \
+              GH_ORG_SHARED_APP_ID \
+              GH_BRANCH_PREFIX \
+              GH_BRANCH_PRODUCT \
+              GH_BRANCH_STAGING \
+              GH_BRANCH_SNAPSHOT \
+              GH_BRANCH_FEATURE
+          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+            /bin/sh .github/scripts/bws_export_secret_file.sh \
+              GH_ORG_SHARED_PEM \
+              "${RUNNER_TEMP}/gh-app-key.pem"
+
+      - name: Read app key
+        id: app-key
+        shell: bash
+        run: |
+          pem="$(cat "${RUNNER_TEMP}/gh-app-key.pem")"
+          printf '%s\n' "$pem" | while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              printf '::add-mask::%s\n' "$line"
+            fi
+          done
+          {
+            echo "private_key<<EOF"
+            printf '%s\n' "$pem"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ env.GH_ORG_SHARED_APP_ID }}
+          private-key: ${{ steps.app-key.outputs.private_key }}
+          owner: ${{ env.GH_ORG_UPSTREAM }}
+          repositories: ${{ inputs.repo }}
+
+
+      - name: Run orchestrator
+        env:
+          GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_REPO: ${{ inputs.repo }}
+          GH_ORG_UPSTREAM: ${{ env.GH_ORG_UPSTREAM }}
+          GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/gh-app-key.pem
+          GH_BRANCH_PREFIX: ${{ env.GH_BRANCH_PREFIX }}
+          GH_BRANCH_PRODUCT: ${{ env.GH_BRANCH_PRODUCT }}
+          GH_BRANCH_STAGING: ${{ env.GH_BRANCH_STAGING }}
+          GH_BRANCH_SNAPSHOT: ${{ env.GH_BRANCH_SNAPSHOT }}
+          GH_BRANCH_FEATURE: ${{ env.GH_BRANCH_FEATURE }}
+        run: |
+          python3 .github/scripts/orchestrator.py
+
+      - name: Cleanup app key
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/gh-app-key.pem"
