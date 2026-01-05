@@ -27,6 +27,9 @@ jobs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     timeout-minutes: 10
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install bws CLI
         uses: ./.github/actions/install-bws
         with:
