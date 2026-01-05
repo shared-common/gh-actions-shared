@@ -11,6 +11,12 @@ from typing import Any, Dict, List, Optional
 
 from discover_repos import discover_fork_repos
 from github_api import GitHubApi, GitHubApiError
+from secret_env import (
+    has_env_or_file,
+    read_optional_value,
+    read_required_secret_file,
+    read_required_value,
+)
 
 
 @dataclass(frozen=True)
@@ -96,44 +102,12 @@ class GitLabApi:
         raise GitLabApiError(0, "GitLab API retry limit exceeded")
 
 
-def _env(name: str) -> str:
-    value = os.environ.get(name)
-    if value is None or value == "":
-        raise ValueError(f"Missing required env var: {name}")
-    return value
-
-
-
-
-def _secret_file_path(env_key: str, file_key: str) -> str:
-    direct = os.environ.get(env_key)
-    if direct:
-        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
-    path = os.environ.get(file_key)
-    if not path:
-        raise ValueError(f"Missing required env var: {file_key}")
-    return path
-
-
-def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
-    size = os.path.getsize(path)
-    if size > max_bytes:
-        raise ValueError(f"{label} file too large")
-    with open(path, "r", encoding="utf-8") as handle:
-        value = handle.read().strip()
-    if not value:
-        raise ValueError(f"{label} file is empty")
-    return value
-
-
 def _github_token() -> str:
-    path = _secret_file_path("GITHUB_APP_TOKEN", "GITHUB_APP_TOKEN_FILE")
-    return _read_secret_file(path, "GITHUB_APP_TOKEN")
+    return read_required_secret_file("GITHUB_APP_TOKEN")
 
 
 def _gitlab_token() -> str:
-    path = _secret_file_path("GL_TOKEN_MCZFORKS", "GL_TOKEN_MCZFORKS_FILE")
-    return _read_secret_file(path, "GL_TOKEN_MCZFORKS")
+    return read_required_secret_file("GL_TOKEN_MCZFORKS")
 
 
 def _resolve_org_and_group() -> tuple[str, str, str]:
@@ -143,7 +117,7 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_WIKI": ("GL_GROUP_ZFORKS", "GL_GROUP_WIKI"),
         "GH_ORG_DIVERGE": ("GL_GROUP_ZDIVERGE", "GL_GROUP_GENERAL"),
     }
-    org_values = {key: os.environ.get(key, "").strip() for key in org_map}
+    org_values = {key: read_optional_value(key) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
     if not active_orgs:
         raise ValueError("Missing required org value")
@@ -151,8 +125,8 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         raise ValueError(f"Multiple org values set: {', '.join(sorted(active_orgs.keys()))}")
     org_key, github_org = next(iter(active_orgs.items()))
     group_key, subgroup_key = org_map[org_key]
-    gitlab_group = os.environ.get(group_key, "").strip()
-    gitlab_subgroup = os.environ.get(subgroup_key, "").strip()
+    gitlab_group = read_optional_value(group_key) or ""
+    gitlab_subgroup = read_optional_value(subgroup_key) or ""
     if not gitlab_group:
         raise ValueError(f"Missing required gitlab group value: {group_key}")
     if not gitlab_subgroup:
@@ -162,17 +136,17 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
 
 def load_config() -> GitLabProtectionConfig:
     github_org, gitlab_group, gitlab_subgroup = _resolve_org_and_group()
-    missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
+    missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return GitLabProtectionConfig(
         github_org=github_org,
-        github_prefix=_env("GH_BRANCH_PREFIX"),
-        github_staging_branch=_env("GH_BRANCH_STAGING"),
-        gitlab_token=_gitlab_token(),
+        github_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=True),
+        github_staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=True),
+        gitlab_token=read_required_secret_file("GL_TOKEN_MCZFORKS"),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
-        gitlab_host=os.environ.get("GL_HOST", "gitlab.com"),
+        gitlab_host=read_optional_value("GL_HOST") or "gitlab.com",
     )
 
 

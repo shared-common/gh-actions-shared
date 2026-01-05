@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Optional
+
+from secret_env import has_env_or_file, read_required_secret_file, read_required_value
 
 
 @dataclass(frozen=True)
@@ -54,38 +54,17 @@ _ORG_KEYS = (
 )
 
 
-def _get_env(name: str) -> str:
-    value = os.environ.get(name)
-    if value is None or value == "":
-        raise ValueError(f"Missing required env var: {name}")
-    return value
-
-
-def _get_secret_file_path(env_key: str, file_key: str) -> str:
-    direct = os.environ.get(env_key)
-    if direct:
-        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
-    path = os.environ.get(file_key)
-    if not path:
-        raise ValueError(f"Missing required env var: {file_key}")
-    return path
-
-
-def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
-    size = os.path.getsize(path)
-    if size > max_bytes:
-        raise ValueError(f"{label} file too large")
-    with open(path, "r", encoding="utf-8") as handle:
-        return handle.read()
-
-
 def _get_pem() -> str:
-    pem_file = _get_secret_file_path("GH_ORG_SHARED_PEM", "GH_ORG_SHARED_PEM_FILE")
-    return _read_secret_file(pem_file, "GH_ORG_SHARED_PEM")
+    return read_required_secret_file("GH_ORG_SHARED_PEM")
 
 
 def _resolve_org() -> str:
-    values = {key: os.environ.get(key, "").strip() for key in _ORG_KEYS}
+    values = {key: "" for key in _ORG_KEYS}
+    for key in _ORG_KEYS:
+        try:
+            values[key] = read_required_value(key, allow_env=True)
+        except ValueError:
+            values[key] = ""
     active = {key: value for key, value in values.items() if value}
     if not active:
         raise ValueError("Missing required org value")
@@ -96,16 +75,16 @@ def _resolve_org() -> str:
 
 def load_config() -> Config:
     org = _resolve_org()
-    missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
+    missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return Config(
         org=org,
-        app_id=_get_env("GH_ORG_SHARED_APP_ID"),
+        app_id=read_required_value("GH_ORG_SHARED_APP_ID", allow_env=True),
         app_pem=_get_pem(),
-        branch_prefix=_get_env("GH_BRANCH_PREFIX"),
-        product_branch=_get_env("GH_BRANCH_PRODUCT"),
-        staging_branch=_get_env("GH_BRANCH_STAGING"),
-        snapshot_branch=_get_env("GH_BRANCH_SNAPSHOT"),
-        feature_branch=_get_env("GH_BRANCH_FEATURE"),
+        branch_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=True),
+        product_branch=read_required_value("GH_BRANCH_PRODUCT", allow_env=True),
+        staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=True),
+        snapshot_branch=read_required_value("GH_BRANCH_SNAPSHOT", allow_env=True),
+        feature_branch=read_required_value("GH_BRANCH_FEATURE", allow_env=True),
     )

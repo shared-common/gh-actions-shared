@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Dict, List, Optional
 
 from config import Config, load_config
@@ -12,64 +11,11 @@ from promote_ff_only import compare_refs, ff_update
 from summary import format_summary
 from sync_mirror import sync_mirror
 from ensure_branches import ensure_branch
+from secret_env import read_required_secret_file
 
 
 WORKFLOW_CRON_1 = "17 3 * * *"
 WORKFLOW_CRON_2 = "17 23 * * *"
-
-
-def _env(name: str) -> str:
-    value = os.environ.get(name)
-    if value is None or value == "":
-        raise ValueError(f"Missing required env var: {name}")
-    return value
-
-
-
-
-def _secret_file_path(env_key: str, file_key: str) -> str:
-    direct = os.environ.get(env_key)
-    if direct:
-        raise ValueError(f"{env_key} must not be set; use {file_key} instead")
-    path = os.environ.get(file_key)
-    if not path:
-        raise ValueError(f"Missing required env var: {file_key}")
-    return path
-
-
-def _read_secret_file(path: str, label: str, max_bytes: int = 64 * 1024) -> str:
-    size = os.path.getsize(path)
-    if size > max_bytes:
-        raise ValueError(f"{label} file too large")
-    with open(path, "r", encoding="utf-8") as handle:
-        return handle.read().strip()
-
-
-def _load_cached_repos(path: str) -> Optional[List[Dict[str, Any]]]:
-    if not path or not os.path.exists(path):
-        return None
-    size = os.path.getsize(path)
-    if size > 5 * 1024 * 1024:
-        raise ValueError("Discovery cache too large")
-    with open(path, "r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, list):
-        raise ValueError("Discovery cache is not a list")
-    repos: List[Dict[str, Any]] = []
-    for item in data:
-        if isinstance(item, dict) and item.get("name"):
-            repos.append(item)
-    return repos
-
-
-def _store_cached_repos(path: str, repos: List[Dict[str, Any]]) -> None:
-    if not path:
-        return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as handle:
-        json.dump(repos, handle, separators=(",", ":"))
-    os.replace(tmp_path, path)
 
 
 def _issue_body(title: str, details: str) -> str:
@@ -379,7 +325,7 @@ def process_repo(api: GitHubApi, cfg: Config, repo: Dict[str, Any], run_id: str)
 
 
 def main() -> int:
-    token = _read_secret_file(_secret_file_path("GITHUB_APP_TOKEN", "GITHUB_APP_TOKEN_FILE"), "GITHUB_APP_TOKEN")
+    token = read_required_secret_file("GITHUB_APP_TOKEN")
     cfg = load_config()
     _validate_branch_config(cfg)
     repo_filter = os.environ.get("INPUT_REPO") or None
@@ -388,12 +334,7 @@ def main() -> int:
     run_id = os.environ.get("GITHUB_RUN_ID", "unknown")
 
     api = GitHubApi(token=token)
-    cache_path = os.environ.get("REPO_CACHE_PATH")
-    repos = _load_cached_repos(cache_path) if cache_path else None
-    if repos is None:
-        repos = discover_fork_repos(api, cfg.org, repo_filter)
-        if cache_path:
-            _store_cached_repos(cache_path, repos)
+    repos = discover_fork_repos(api, cfg.org, repo_filter)
 
     results: List[Dict[str, Any]] = []
     for repo in repos:

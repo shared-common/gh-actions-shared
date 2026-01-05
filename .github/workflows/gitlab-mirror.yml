@@ -10,6 +10,11 @@ on:
         description: "Optional single fork repo name to target"
         required: false
         type: string
+      clear_cache:
+        description: "Clear repo discovery cache before running"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,6 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      issues: write
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     timeout-minutes: 10
@@ -30,20 +36,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sanity check (compileall)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall .github/scripts
+
+      - name: Shellcheck scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shellcheck .github/scripts/*.sh
+
       - name: Install bws CLI
         uses: ./.github/actions/install-bws
         with:
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
-
-      - name: Restore repo discovery cache
-        id: repo-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/repo-discovery.json
-          key: gitlab-mirror-discovery-v2-${{ matrix.github_org }}-${{ github.run_id }}
-          restore-keys: |
-            gitlab-mirror-discovery-v2-${{ matrix.github_org }}-
 
       - name: Load BWS config and build matrix
         id: build-matrix
@@ -52,6 +66,7 @@ jobs:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
+          set -euo pipefail
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" \
             /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
@@ -77,6 +92,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      issues: write
     outputs:
       gitlab_created: ${{ steps.gitlab-mirror.outputs.gitlab_created }}
     concurrency:
@@ -86,6 +102,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ensure cache directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/.cache"
+          if [ ! -f "${GITHUB_WORKSPACE}/.cache/repo-discovery.json" ]; then
+            printf '[]' > "${GITHUB_WORKSPACE}/.cache/repo-discovery.json"
+          fi
+
+      - name: Cache repo discovery
+        id: repo-cache
+        if: ${{ !inputs.clear_cache }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/.cache/repo-discovery.json
+          key: >-
+            gitlab-mirror-discovery-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            gitlab-mirror-discovery-${{ github.repository }}-
+
+      - name: Clear repo discovery cache
+        if: ${{ inputs.clear_cache }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "${GITHUB_WORKSPACE}/.cache/repo-discovery.json"
 
       - name: Install bws CLI
         uses: ./.github/actions/install-bws
@@ -100,6 +148,7 @@ jobs:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
+          set -euo pipefail
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
             /bin/sh .github/scripts/bws_export_output.sh \
@@ -109,7 +158,6 @@ jobs:
               GH_BRANCH_STAGING \
               GH_BRANCH_FEATURE \
               GH_BRANCH_RELEASE \
-              GL_TOKEN_MCZFORKS \
               GH_ORG_TBOX \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \
@@ -128,6 +176,7 @@ jobs:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
+          set -euo pipefail
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             /bin/sh .github/scripts/bws_export_secret_file.sh \
               GH_ORG_SHARED_PEM \
@@ -138,6 +187,7 @@ jobs:
         id: app-key
         shell: bash
         run: |
+          set -euo pipefail
           pem="$(cat "${RUNNER_TEMP}/gh-app-key.pem")"
           printf '%s\n' "$pem" | while IFS= read -r line; do
             if [ -n "$line" ]; then
@@ -182,10 +232,22 @@ jobs:
           echo "github_token_file=$gh_token_file" >> "$GITHUB_OUTPUT"
           echo "gitlab_token_file=$gl_token_file" >> "$GITHUB_OUTPUT"
 
+      - name: Validate INPUT_REPO
+        shell: bash
+        env:
+          INPUT_REPO: ${{ inputs.repo }}
+        run: |
+          set -euo pipefail
+          /bin/sh .github/scripts/validate_input_repo.sh
+
       - name: Run GitLab mirror
         id: gitlab-mirror
         env:
           INPUT_REPO: ${{ inputs.repo }}
+          REPO_CACHE_PATH: ${{ github.workspace }}/.cache/repo-discovery.json
+          REPO_CACHE_TTL_SECONDS: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_SECONDS ||
+            '3600' }}
           GH_ORG_SHARED_PEM_FILE: ${{ steps.app-key-file.outputs.path }}
           GH_ORG_SHARED_APP_ID: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
           GH_BRANCH_PREFIX: ${{ steps.bws.outputs.GH_BRANCH_PREFIX }}
@@ -205,7 +267,6 @@ jobs:
           GL_GROUP_GENERAL: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_GENERAL && steps.bws.outputs.GL_GROUP_GENERAL || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
-          REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
         run: |
           python3 .github/scripts/gitlab_mirror.py
 
@@ -213,6 +274,10 @@ jobs:
         if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
         env:
           INPUT_REPO: ${{ inputs.repo }}
+          REPO_CACHE_PATH: ${{ github.workspace }}/.cache/repo-discovery.json
+          REPO_CACHE_TTL_SECONDS: >-
+            ${{ inputs.clear_cache && '0' || vars.REPO_CACHE_TTL_SECONDS ||
+            '3600' }}
           GH_ORG_SHARED_APP_ID: ${{ steps.bws.outputs.GH_ORG_SHARED_APP_ID }}
           GH_BRANCH_PREFIX: ${{ steps.bws.outputs.GH_BRANCH_PREFIX }}
           GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
@@ -229,21 +294,32 @@ jobs:
           GL_GROUP_GENERAL: ${{ matrix.gitlab_subgroup == steps.bws.outputs.GL_GROUP_GENERAL && steps.bws.outputs.GL_GROUP_GENERAL || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
-          REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
         run: |
           python3 .github/scripts/gitlab_branch_protection.py
+
+      - name: Ensure repo discovery cache file
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/.cache"
+          if [ ! -f "${GITHUB_WORKSPACE}/.cache/repo-discovery.json" ]; then
+            printf '[]' > "${GITHUB_WORKSPACE}/.cache/repo-discovery.json"
+          fi
 
       - name: Save repo discovery cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/repo-discovery.json
-          key: gitlab-mirror-discovery-v2-${{ matrix.github_org }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/.cache/repo-discovery.json
+          key: >-
+            gitlab-mirror-discovery-${{ github.repository }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
           rm -f "${RUNNER_TEMP}/gh-app-key.pem" \
                 "${RUNNER_TEMP}/github-app-token" \
                 "${RUNNER_TEMP}/gitlab-token"

@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 python3 - <<'PY'
 import json
