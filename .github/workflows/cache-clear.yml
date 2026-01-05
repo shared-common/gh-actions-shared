@@ -57,10 +57,9 @@ jobs:
             printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python3 - <<'PY'
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
 import json
 import os
-import sys
 
 matrix_json = os.environ.get("MATRIX_JSON", "")
 try:
@@ -78,7 +77,6 @@ if not filtered:
     raise SystemExit(f"Unknown org: {org}")
 print(f"matrix={json.dumps({'include': filtered})}")
 PY
-          >> "$GITHUB_OUTPUT"
 
   clear:
     needs: matrix
