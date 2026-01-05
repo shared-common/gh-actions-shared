@@ -41,9 +41,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/repo-discovery.json
-          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
+          key: gitlab-mirror-discovery-v2-${{ matrix.github_org }}-${{ github.run_id }}
           restore-keys: |
-            repo-discovery-${{ matrix.github_org }}-
+            gitlab-mirror-discovery-v2-${{ matrix.github_org }}-
 
       - name: Load BWS config and build matrix
         id: build-matrix
@@ -233,7 +233,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/repo-discovery.json
-          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
+          key: gitlab-mirror-discovery-v2-${{ matrix.github_org }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()
