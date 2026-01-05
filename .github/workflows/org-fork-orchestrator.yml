@@ -36,6 +36,16 @@ jobs:
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
+
+      - name: Restore repo discovery cache
+        id: repo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/repo-discovery.json
+          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
+          restore-keys: |
+            repo-discovery-${{ matrix.github_org }}-
+
       - name: Load BWS config and build matrix
         id: build-matrix
         shell: bash
@@ -69,6 +79,16 @@ jobs:
         with:
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
+
+
+      - name: Restore repo discovery cache
+        id: repo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/repo-discovery.json
+          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
+          restore-keys: |
+            repo-discovery-${{ matrix.github_org }}-
 
       - name: Load BWS config
         id: bws
@@ -155,8 +175,17 @@ jobs:
           GH_ORG_WIKI: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_WIKI && steps.bws.outputs.GH_ORG_WIKI || '' }}
           GH_ORG_DIVERGE: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_DIVERGE && steps.bws.outputs.GH_ORG_DIVERGE || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
+          REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
         run: |
           python3 .github/scripts/orchestrator.py
+
+
+      - name: Save repo discovery cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/repo-discovery.json
+          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()

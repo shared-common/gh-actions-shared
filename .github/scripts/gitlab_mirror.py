@@ -104,6 +104,32 @@ def _gitlab_token() -> str:
     return _read_secret_file(path, "GL_TOKEN_MCZFORKS")
 
 
+def _load_cached_repos(path: str) -> Optional[List[Dict[str, Any]]]:
+    if not path or not os.path.exists(path):
+        return None
+    size = os.path.getsize(path)
+    if size > 5 * 1024 * 1024:
+        raise ValueError("Discovery cache too large")
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, list):
+        raise ValueError("Discovery cache is not a list")
+    repos: List[Dict[str, Any]] = []
+    for item in data:
+        if isinstance(item, dict) and item.get("name"):
+            repos.append(item)
+    return repos
+
+
+def _store_cached_repos(path: str, repos: List[Dict[str, Any]]) -> None:
+    if not path:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        json.dump(repos, handle, separators=(",", ":"))
+    os.replace(tmp_path, path)
+
 def _resolve_org_and_group() -> tuple[str, str, str]:
     org_map = {
         "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
@@ -639,7 +665,12 @@ def main() -> int:
 
     api = GitHubApi(token=token)
     preflight = _preflight(api, cfg)
-    repos = discover_fork_repos(api, cfg.github_org, repo_filter)
+    cache_path = os.environ.get("REPO_CACHE_PATH")
+    repos = _load_cached_repos(cache_path) if cache_path else None
+    if repos is None:
+        repos = discover_fork_repos(api, cfg.github_org, repo_filter)
+        if cache_path:
+            _store_cached_repos(cache_path, repos)
 
     results: List[Dict[str, Any]] = []
     for repo in repos:

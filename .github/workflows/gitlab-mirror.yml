@@ -36,6 +36,15 @@ jobs:
           version: "1.0.0"
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
+      - name: Restore repo discovery cache
+        id: repo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/repo-discovery.json
+          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
+          restore-keys: |
+            repo-discovery-${{ matrix.github_org }}-
+
       - name: Load BWS config
         id: bws
         shell: bash
@@ -80,6 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+      max-parallel: 1
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -207,6 +217,7 @@ jobs:
           GL_GROUP_GENERAL: ${{ steps.bws.outputs.GL_GROUP_GENERAL }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
+          REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
         run: |
           python3 .github/scripts/gitlab_mirror.py
 
@@ -230,8 +241,16 @@ jobs:
           GL_GROUP_GENERAL: ${{ steps.bws.outputs.GL_GROUP_GENERAL }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
           GL_TOKEN_MCZFORKS_FILE: ${{ steps.token-files.outputs.gitlab_token_file }}
+          REPO_CACHE_PATH: ${{ runner.temp }}/repo-discovery.json
         run: |
           python3 .github/scripts/gitlab_branch_protection.py
+
+      - name: Save repo discovery cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/repo-discovery.json
+          key: repo-discovery-${{ matrix.github_org }}-${{ github.run_id }}
 
       - name: Post cleanup
         if: always()
