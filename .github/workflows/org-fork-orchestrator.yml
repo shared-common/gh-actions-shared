@@ -149,10 +149,10 @@ jobs:
           GH_BRANCH_STAGING: ${{ steps.bws.outputs.GH_BRANCH_STAGING }}
           GH_BRANCH_SNAPSHOT: ${{ steps.bws.outputs.GH_BRANCH_SNAPSHOT }}
           GH_BRANCH_FEATURE: ${{ steps.bws.outputs.GH_BRANCH_FEATURE }}
-          GH_ORG_TBOX: ${{ steps.bws.outputs.GH_ORG_TBOX }}
-          GH_ORG_SECOPS: ${{ steps.bws.outputs.GH_ORG_SECOPS }}
-          GH_ORG_WIKI: ${{ steps.bws.outputs.GH_ORG_WIKI }}
-          GH_ORG_DIVERGE: ${{ steps.bws.outputs.GH_ORG_DIVERGE }}
+          GH_ORG_TBOX: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_TBOX && steps.bws.outputs.GH_ORG_TBOX || '' }}
+          GH_ORG_SECOPS: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_SECOPS && steps.bws.outputs.GH_ORG_SECOPS || '' }}
+          GH_ORG_WIKI: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_WIKI && steps.bws.outputs.GH_ORG_WIKI || '' }}
+          GH_ORG_DIVERGE: ${{ matrix.github_org == steps.bws.outputs.GH_ORG_DIVERGE && steps.bws.outputs.GH_ORG_DIVERGE || '' }}
           GITHUB_APP_TOKEN_FILE: ${{ steps.token-files.outputs.github_token_file }}
         run: |
           python3 .github/scripts/orchestrator.py
