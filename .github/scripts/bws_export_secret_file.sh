@@ -17,9 +17,3 @@ fi
 mkdir -p "$(dirname "$out_path")"
 printf '%s' "$value" > "$out_path"
 chmod 600 "$out_path"
-
-printf '%s\n' "$value" | while IFS= read -r line; do
-  if [ -n "$line" ]; then
-    printf '::add-mask::%s\n' "$line"
-  fi
-done

@@ -17,16 +17,6 @@ from secret_env import (
     read_required_secret_file,
     read_required_value,
 )
-from repo_metadata_cache import (
-    get_gitlab_project,
-    get_gitlab_protection,
-    get_repo_meta,
-    load_cache,
-    save_cache,
-    set_gitlab_project,
-    set_gitlab_protection,
-    set_repo_meta,
-)
 
 
 @dataclass(frozen=True)
@@ -210,10 +200,6 @@ def process_repo(
     api: GitHubApi,
     cfg: GitLabProtectionConfig,
     repo: Dict[str, Any],
-    cache: Dict[str, Any],
-    ttl_meta: int,
-    ttl_gitlab_project: int,
-    ttl_gitlab_branch: int,
 ) -> Dict[str, Any]:
     owner = cfg.github_org
     name = repo.get("name")
@@ -222,11 +208,8 @@ def process_repo(
         result["notes"] = ["Skipped: missing repo name"]
         return result
     try:
-        repo_details = get_repo_meta(cache, owner, name, ttl_meta)
-        if repo_details is None:
-            repo_details_resp = api.get(f"/repos/{owner}/{name}")
-            repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
-            set_repo_meta(cache, owner, name, repo_details)
+        repo_details_resp = api.get(f"/repos/{owner}/{name}")
+        repo_details = repo_details_resp.data if isinstance(repo_details_resp.data, dict) else {}
     except GitHubApiError as exc:
         result["notes"] = [f"Skipped: failed to fetch repo metadata ({exc.status})"]
         return result
@@ -241,41 +224,28 @@ def process_repo(
 
     gitlab_api = GitLabApi(cfg.gitlab_token, cfg.gitlab_host)
     try:
-        cached_project = get_gitlab_project(cache, owner, name, ttl_gitlab_project)
-        if cached_project not in ("exists", "created"):
-            _gitlab_project_id(cfg, name)
-            set_gitlab_project(cache, owner, name, "exists")
+        _gitlab_project_id(cfg, name)
     except Exception as exc:  # noqa: BLE001 - safe summary path
         result["notes"] = [f"Skipped: invalid gitlab project ({exc})"]
         return result
 
     try:
-        cached = get_gitlab_protection(cache, owner, name, cfg.staging_ref, ttl_gitlab_branch)
-        if cached:
-            result["protect_mcr_staging"] = cached
-        else:
-            result["protect_mcr_staging"] = _ensure_branch_protection(
-                gitlab_api,
-                cfg,
-                name,
-                cfg.staging_ref,
-            )
-            set_gitlab_protection(cache, owner, name, cfg.staging_ref, result["protect_mcr_staging"])
+        result["protect_mcr_staging"] = _ensure_branch_protection(
+            gitlab_api,
+            cfg,
+            name,
+            cfg.staging_ref,
+        )
     except GitLabApiError as exc:
         result["protect_mcr_staging"] = f"failed ({exc.status})"
 
     try:
-        cached = get_gitlab_protection(cache, owner, name, cfg.release_ref, ttl_gitlab_branch)
-        if cached:
-            result["protect_mcr_release"] = cached
-        else:
-            result["protect_mcr_release"] = _ensure_branch_protection(
-                gitlab_api,
-                cfg,
-                name,
-                cfg.release_ref,
-            )
-            set_gitlab_protection(cache, owner, name, cfg.release_ref, result["protect_mcr_release"])
+        result["protect_mcr_release"] = _ensure_branch_protection(
+            gitlab_api,
+            cfg,
+            name,
+            cfg.release_ref,
+        )
     except GitLabApiError as exc:
         result["protect_mcr_release"] = f"failed ({exc.status})"
 
@@ -325,26 +295,9 @@ def main() -> int:
     cfg = load_config()
     api = GitHubApi(token=token)
     repos = discover_fork_repos(api, cfg.github_org, repo_filter)
-    cache_path = os.environ.get("REPO_META_CACHE_PATH") or os.environ.get("REPO_CACHE_PATH")
-    cache = load_cache(cache_path) if cache_path else {"version": 1, "orgs": {}}
-    def _ttl(name: str, default: int) -> int:
-        raw = os.environ.get(name, "").strip()
-        if not raw:
-            return default
-        try:
-            return int(raw)
-        except ValueError:
-            return default
-
-    ttl_meta = _ttl("REPO_CACHE_TTL_META", 800)
-    ttl_gitlab_project = _ttl("REPO_CACHE_TTL_GITLAB_PROJ", 21600)
-    ttl_gitlab_branch = _ttl("REPO_CACHE_TTL_GITLAB_BRANCH", 900)
-
     results: List[Dict[str, Any]] = []
     for repo in repos:
-        results.append(process_repo(api, cfg, repo, cache, ttl_meta, ttl_gitlab_project, ttl_gitlab_branch))
-    if cache_path:
-        save_cache(cache_path, cache)
+        results.append(process_repo(api, cfg, repo))
 
     summary = _summary_lines(results)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")

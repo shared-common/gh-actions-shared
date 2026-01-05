@@ -12,10 +12,5 @@ for key in "$@"; do
     echo "Missing secret: $key" >&2
     exit 1
   fi
-  printf '%s\n' "$value" | while IFS= read -r line; do
-    if [ -n "$line" ]; then
-      printf '::add-mask::%s\n' "$line"
-    fi
-  done
   printf "%s<<EOF\n%s\nEOF\n" "$key" "$value" >> "$GITHUB_OUTPUT"
 done

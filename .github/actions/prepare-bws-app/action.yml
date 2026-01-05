@@ -1,0 +1,172 @@
+name: Prepare BWS app credentials
+description: "Load BWS secrets, prepare app credentials, select org, and mint a GitHub App token."
+inputs:
+  secrets:
+    description: "Newline-delimited list of BWS secret names to export"
+    required: true
+  org_keys:
+    description: "Newline-delimited list of org secret keys to map to the matrix org"
+    required: true
+  github_org:
+    description: "GitHub org name for the current matrix entry"
+    required: true
+  repo:
+    description: "Optional single repo name to scope the GitHub App token"
+    required: false
+    default: ""
+  app_id_key:
+    description: "Secret name for the GitHub App ID"
+    required: false
+    default: "GH_ORG_SHARED_APP_ID"
+  app_pem_key:
+    description: "Secret name for the GitHub App PEM"
+    required: false
+    default: "GH_ORG_SHARED_PEM"
+  chmod_keys:
+    description: "Newline-delimited list of secret names to chmod 600"
+    required: false
+    default: ""
+outputs:
+  github_app_token_file:
+    description: "Path to the minted GitHub App token file"
+    value: ${{ steps.store-token.outputs.github_app_token_file }}
+runs:
+  using: composite
+  steps:
+    - name: Load BWS secrets to temp files
+      shell: bash
+      env:
+        BWS_ACCESS_TOKEN: ${{ env.BWS_ACCESS_TOKEN }}
+        BWS_PROJECT_ID: ${{ env.BWS_PROJECT_ID }}
+      run: |
+        set -euo pipefail
+        if [ -z "${BWS_ACCESS_TOKEN:-}" ] || [ -z "${BWS_PROJECT_ID:-}" ]; then
+          echo "BWS_ACCESS_TOKEN and BWS_PROJECT_ID must be set" >&2
+          exit 1
+        fi
+        secrets_dir="${RUNNER_TEMP}/bws"
+        mkdir -p "$secrets_dir"
+        secrets=()
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          secrets+=("$key")
+        done <<'EOF'
+        ${{ inputs.secrets }}
+        EOF
+        if [ "${#secrets[@]}" -eq 0 ]; then
+          echo "No secrets provided" >&2
+          exit 1
+        fi
+        bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+          env SECRETS_DIR="${secrets_dir}" \
+          /bin/sh .github/scripts/bws_export_secret_files.sh \
+            "${secrets_dir}" \
+            "${secrets[@]}"
+
+    - name: Expose secret file paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        secrets_dir="${RUNNER_TEMP}/bws"
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          echo "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
+        done <<'EOF'
+        ${{ inputs.secrets }}
+        EOF
+
+    - name: Prepare app credentials
+      shell: bash
+      run: |
+        set -euo pipefail
+        app_pem_key="${{ inputs.app_pem_key }}"
+        app_id_key="${{ inputs.app_id_key }}"
+        secrets_dir="${RUNNER_TEMP}/bws"
+        src="${secrets_dir}/${app_pem_key}"
+        dst="${secrets_dir}/${app_pem_key}.pem"
+        umask 077
+        data="$(cat "$src")"
+        if printf '%s' "$data" | grep -q '\\n'; then
+          printf '%b' "$data" > "$dst"
+        else
+          printf '%s' "$data" > "$dst"
+        fi
+        chmod 600 "$dst"
+        echo "${app_pem_key}_FILE=${dst}" >> "$GITHUB_ENV"
+        echo "${app_id_key}_FILE=${secrets_dir}/${app_id_key}" >> "$GITHUB_ENV"
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          chmod 600 "${secrets_dir}/${key}"
+        done <<'EOF'
+        ${{ inputs.chmod_keys }}
+        EOF
+
+    - name: Select org file path
+      shell: bash
+      run: |
+        set -euo pipefail
+        matrix_org="${{ inputs.github_org }}"
+        secrets_dir="${RUNNER_TEMP}/bws"
+        selected=""
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          printf '%s<<EOF\nEOF\n' "${key}_FILE" >> "$GITHUB_ENV"
+        done <<'EOF'
+        ${{ inputs.org_keys }}
+        EOF
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          org_value="$(cat "${secrets_dir}/${key}")"
+          if [ "$matrix_org" = "$org_value" ]; then
+            echo "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
+            selected="$key"
+            break
+          fi
+        done <<'EOF'
+        ${{ inputs.org_keys }}
+        EOF
+        if [ -z "$selected" ]; then
+          echo "Unknown org mapping for ${matrix_org}" >&2
+          exit 1
+        fi
+
+    - name: Read app key
+      id: app-key
+      shell: bash
+      run: |
+        set -euo pipefail
+        pem="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem")"
+        {
+          echo "private_key<<EOF"
+          printf '%s\n' "$pem"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Read app context
+      id: app-context
+      shell: bash
+      run: |
+        set -euo pipefail
+        app_id="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_id_key }}")"
+        echo "app_id=${app_id}" >> "$GITHUB_OUTPUT"
+        echo "org=${{ inputs.github_org }}" >> "$GITHUB_OUTPUT"
+
+    - name: Mint GitHub App token
+      id: app-token
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ steps.app-context.outputs.app_id }}
+        private-key: ${{ steps.app-key.outputs.private_key }}
+        owner: ${{ steps.app-context.outputs.org }}
+        repositories: ${{ inputs.repo }}
+
+    - name: Store app token
+      id: store-token
+      shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+        token_file="${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
+        printf '%s' "${{ steps.app-token.outputs.token }}" > "$token_file"
+        echo "GITHUB_APP_TOKEN_FILE=${token_file}" >> "$GITHUB_ENV"
+        echo "github_app_token_file=${token_file}" >> "$GITHUB_OUTPUT"
