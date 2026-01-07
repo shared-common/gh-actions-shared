@@ -79,7 +79,7 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
         "GH_ORG_SECOPS": ("GL_GROUP_ZFORKS", "GL_GROUP_SECOPS"),
         "GH_ORG_WIKI": ("GL_GROUP_ZFORKS", "GL_GROUP_WIKI"),
-        "GH_ORG_DIVERGE": ("GL_GROUP_ZDIVERGE", "GL_GROUP_GENERAL"),
+        "GH_ORG_DIVERGE": ("GL_GROUP_ZFORKS", "GL_GROUP_DIVERGE"),
     }
     org_values = {key: read_optional_value(key) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}

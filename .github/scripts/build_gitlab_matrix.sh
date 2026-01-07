@@ -11,8 +11,7 @@ group_keys = (
     "GL_GROUP_TBOX",
     "GL_GROUP_SECOPS",
     "GL_GROUP_WIKI",
-    "GL_GROUP_ZDIVERGE",
-    "GL_GROUP_GENERAL",
+    "GL_GROUP_DIVERGE",
 )
 env = {key: os.environ.get(key, "").strip() for key in org_keys + group_keys}
 missing = [key for key, value in env.items() if not value]
@@ -42,8 +41,8 @@ matrix = {
         },
         {
             "github_org": env["GH_ORG_DIVERGE"],
-            "gitlab_group": env["GL_GROUP_ZDIVERGE"],
-            "gitlab_subgroup": env["GL_GROUP_GENERAL"],
+            "gitlab_group": env["GL_GROUP_ZFORKS"],
+            "gitlab_subgroup": env["GL_GROUP_DIVERGE"],
         },
     ]
 }
