@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -lt 2 ]; then
-  echo "Usage: $0 <OUTPUT_DIR> <ENV_KEY> [ENV_KEY...]" >&2
+  printf '%s\n' "Usage: $0 <OUTPUT_DIR> <ENV_KEY> [ENV_KEY...]" >&2
   exit 1
 fi
 

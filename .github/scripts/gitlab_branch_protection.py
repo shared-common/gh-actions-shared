@@ -117,7 +117,7 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_WIKI": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_WIKI"),
         "GH_ORG_DIVERGE": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_DIVERGE"),
     }
-    org_values = {key: read_optional_value(key) or "" for key in org_map}
+    org_values = {key: read_optional_value(key, allow_env=False) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
     if not active_orgs:
         raise ValueError("Missing required org value")
@@ -125,8 +125,8 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         raise ValueError(f"Multiple org values set: {', '.join(sorted(active_orgs.keys()))}")
     org_key, github_org = next(iter(active_orgs.items()))
     group_key, subgroup_key = org_map[org_key]
-    gitlab_group = read_optional_value(group_key) or ""
-    gitlab_subgroup = read_optional_value(subgroup_key) or ""
+    gitlab_group = read_optional_value(group_key, allow_env=False) or ""
+    gitlab_subgroup = read_optional_value(subgroup_key, allow_env=False) or ""
     if not gitlab_group:
         raise ValueError(f"Missing required gitlab group value: {group_key}")
     if not gitlab_subgroup:
@@ -141,12 +141,12 @@ def load_config() -> GitLabProtectionConfig:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return GitLabProtectionConfig(
         github_org=github_org,
-        github_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=True),
-        github_staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=True),
+        github_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=False),
+        github_staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=False),
         gitlab_token=read_required_secret_file("GL_TOKEN_DERIVED"),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
-        gitlab_host=read_optional_value("GL_HOST") or "gitlab.com",
+        gitlab_host=read_optional_value("GL_HOST", allow_env=True) or "gitlab.com",
     )
 
 

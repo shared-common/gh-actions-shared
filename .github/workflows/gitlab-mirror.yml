@@ -61,9 +61,10 @@ jobs:
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           set -euo pipefail
+          umask 077
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" \
-            /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
+            /bin/sh .github/scripts/bws_export_secret_files.sh "${RUNNER_TEMP}/bws" \
               GH_ORG_TOOLS \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \
@@ -72,8 +73,13 @@ jobs:
               GL_GROUP_SUB_TOOLS \
               GL_GROUP_SUB_SECOPS \
               GL_GROUP_SUB_WIKI \
-              GL_GROUP_SUB_DIVERGE \
-              ; .github/scripts/build_gitlab_matrix.sh' | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
+              GL_GROUP_SUB_DIVERGE
+          for key in GH_ORG_TOOLS GH_ORG_SECOPS GH_ORG_WIKI GH_ORG_DIVERGE \
+            GL_GROUP_TOP_DERIVED GL_GROUP_SUB_TOOLS GL_GROUP_SUB_SECOPS GL_GROUP_SUB_WIKI GL_GROUP_SUB_DIVERGE
+          do
+            printf '%s\n' "${key}_FILE=${RUNNER_TEMP}/bws/${key}" >> "$GITHUB_ENV"
+          done
+          /bin/sh .github/scripts/build_gitlab_matrix.sh | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   mirror:
     needs: matrix
@@ -219,3 +225,8 @@ jobs:
           do
             printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
           done
+          {
+            printf '%s\n' "GH_APP_PRIVATE_KEY="
+            printf '%s\n' "GH_APP_ID="
+            printf '%s\n' "GH_APP_ORG="
+          } >> "$GITHUB_ENV"

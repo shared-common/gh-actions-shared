@@ -61,9 +61,18 @@ jobs:
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
         run: |
           set -euo pipefail
+          umask 077
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
-            env PATH="${PATH}" GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
-            /bin/sh .github/scripts/build_org_matrix.sh
+            env PATH="${PATH}" \
+            /bin/sh .github/scripts/bws_export_secret_files.sh "${RUNNER_TEMP}/bws" \
+              GH_ORG_TOOLS \
+              GH_ORG_SECOPS \
+              GH_ORG_WIKI \
+              GH_ORG_DIVERGE
+          for key in GH_ORG_TOOLS GH_ORG_SECOPS GH_ORG_WIKI GH_ORG_DIVERGE; do
+            printf '%s\n' "${key}_FILE=${RUNNER_TEMP}/bws/${key}" >> "$GITHUB_ENV"
+          done
+          /bin/sh .github/scripts/build_org_matrix.sh
 
   orchestrate:
     needs: matrix
@@ -168,3 +177,8 @@ jobs:
           do
             printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
           done
+          {
+            printf '%s\n' "GH_APP_PRIVATE_KEY="
+            printf '%s\n' "GH_APP_ID="
+            printf '%s\n' "GH_APP_ORG="
+          } >> "$GITHUB_ENV"

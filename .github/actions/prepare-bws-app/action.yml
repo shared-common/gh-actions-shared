@@ -41,7 +41,7 @@ runs:
       run: |
         set -euo pipefail
         if [ -z "${BWS_ACCESS_TOKEN:-}" ] || [ -z "${BWS_PROJECT_ID:-}" ]; then
-          echo "BWS_ACCESS_TOKEN and BWS_PROJECT_ID must be set" >&2
+          printf '%s\n' "BWS_ACCESS_TOKEN and BWS_PROJECT_ID must be set" >&2
           exit 1
         fi
         secrets_dir="${RUNNER_TEMP}/bws"
@@ -54,7 +54,7 @@ runs:
         ${{ inputs.secrets }}
         EOF
         if [ "${#secrets[@]}" -eq 0 ]; then
-          echo "No secrets provided" >&2
+          printf '%s\n' "No secrets provided" >&2
           exit 1
         fi
         bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
@@ -70,7 +70,7 @@ runs:
         secrets_dir="${RUNNER_TEMP}/bws"
         while IFS= read -r key; do
           [ -z "$key" ] && continue
-          echo "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
+          printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
         done <<'EOF'
         ${{ inputs.secrets }}
         EOF
@@ -92,8 +92,8 @@ runs:
           printf '%s' "$data" > "$dst"
         fi
         chmod 600 "$dst"
-        echo "${app_pem_key}_FILE=${dst}" >> "$GITHUB_ENV"
-        echo "${app_id_key}_FILE=${secrets_dir}/${app_id_key}" >> "$GITHUB_ENV"
+        printf '%s\n' "${app_pem_key}_FILE=${dst}" >> "$GITHUB_ENV"
+        printf '%s\n' "${app_id_key}_FILE=${secrets_dir}/${app_id_key}" >> "$GITHUB_ENV"
         while IFS= read -r key; do
           [ -z "$key" ] && continue
           chmod 600 "${secrets_dir}/${key}"
@@ -118,7 +118,7 @@ runs:
           [ -z "$key" ] && continue
           org_value="$(cat "${secrets_dir}/${key}")"
           if [ "$matrix_org" = "$org_value" ]; then
-            echo "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
+            printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
             selected="$key"
             break
           fi
@@ -126,38 +126,39 @@ runs:
         ${{ inputs.org_keys }}
         EOF
         if [ -z "$selected" ]; then
-          echo "Unknown org mapping for ${matrix_org}" >&2
+          printf '%s\n' "Unknown org mapping for ${matrix_org}" >&2
           exit 1
         fi
 
-    - name: Read app key
-      id: app-key
+    - name: Read app credentials
       shell: bash
       run: |
         set -euo pipefail
         pem="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem")"
-        {
-          echo "private_key<<EOF"
-          printf '%s\n' "$pem"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
-    - name: Read app context
-      id: app-context
-      shell: bash
-      run: |
-        set -euo pipefail
         app_id="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_id_key }}")"
-        echo "app_id=${app_id}" >> "$GITHUB_OUTPUT"
-        echo "org=${{ inputs.github_org }}" >> "$GITHUB_OUTPUT"
+        # Mask each line to prevent accidental log exposure.
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+          printf '%s\n' "$pem" | while IFS= read -r line; do
+            [ -n "$line" ] && printf '%s\n' "::add-mask::$line"
+          done
+          [ -n "$app_id" ] && printf '%s\n' "::add-mask::$app_id"
+        fi
+        {
+          printf '%s<<EOF\n' "GH_APP_PRIVATE_KEY"
+          printf '%s\n' "$pem"
+          printf 'EOF\n'
+          printf 'GH_APP_ID=%s\n' "$app_id"
+          printf 'GH_APP_ORG=%s\n' "${{ inputs.github_org }}"
+        } >> "$GITHUB_ENV"
+        rm -f "${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem"
 
     - name: Mint GitHub App token
       id: app-token
       uses: actions/create-github-app-token@v2
       with:
-        app-id: ${{ steps.app-context.outputs.app_id }}
-        private-key: ${{ steps.app-key.outputs.private_key }}
-        owner: ${{ steps.app-context.outputs.org }}
+        app-id: ${{ env.GH_APP_ID }}
+        private-key: ${{ env.GH_APP_PRIVATE_KEY }}
+        owner: ${{ env.GH_APP_ORG }}
         repositories: ${{ inputs.repo }}
 
     - name: Store app token
@@ -167,6 +168,19 @@ runs:
         set -euo pipefail
         umask 077
         token_file="${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+          printf '%s\n' "::add-mask::${{ steps.app-token.outputs.token }}"
+        fi
         printf '%s' "${{ steps.app-token.outputs.token }}" > "$token_file"
-        echo "GITHUB_APP_TOKEN_FILE=${token_file}" >> "$GITHUB_ENV"
-        echo "github_app_token_file=${token_file}" >> "$GITHUB_OUTPUT"
+        printf '%s\n' "GITHUB_APP_TOKEN_FILE=${token_file}" >> "$GITHUB_ENV"
+        printf '%s\n' "github_app_token_file=${token_file}" >> "$GITHUB_OUTPUT"
+
+    - name: Clear app env
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          printf '%s\n' "GH_APP_PRIVATE_KEY="
+          printf '%s\n' "GH_APP_ID="
+          printf '%s\n' "GH_APP_ORG="
+        } >> "$GITHUB_ENV"

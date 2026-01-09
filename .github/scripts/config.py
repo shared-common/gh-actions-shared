@@ -62,7 +62,7 @@ def _resolve_org() -> str:
     values = {key: "" for key in _ORG_KEYS}
     for key in _ORG_KEYS:
         try:
-            values[key] = read_required_value(key, allow_env=True)
+            values[key] = read_required_value(key, allow_env=False)
         except ValueError:
             values[key] = ""
     active = {key: value for key, value in values.items() if value}
@@ -80,11 +80,11 @@ def load_config() -> Config:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
     return Config(
         org=org,
-        app_id=read_required_value("GH_ORG_SHARED_APP_ID", allow_env=True),
+        app_id=read_required_value("GH_ORG_SHARED_APP_ID", allow_env=False),
         app_pem=_get_pem(),
-        branch_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=True),
-        product_branch=read_required_value("GH_BRANCH_PRODUCT", allow_env=True),
-        staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=True),
-        snapshot_branch=read_required_value("GH_BRANCH_SNAPSHOT", allow_env=True),
-        feature_branch=read_required_value("GH_BRANCH_FEATURE", allow_env=True),
+        branch_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=False),
+        product_branch=read_required_value("GH_BRANCH_PRODUCT", allow_env=False),
+        staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=False),
+        snapshot_branch=read_required_value("GH_BRANCH_SNAPSHOT", allow_env=False),
+        feature_branch=read_required_value("GH_BRANCH_FEATURE", allow_env=False),
     )
