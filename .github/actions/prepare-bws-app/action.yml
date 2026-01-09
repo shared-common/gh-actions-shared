@@ -129,56 +129,30 @@ runs:
           exit 1
         fi
 
-    - name: Read app credentials
+    - name: Mint GitHub App token (JWT)
+      id: app-token
       shell: bash
       run: |
         set -euo pipefail
-        pem="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem")"
-        app_id="$(cat "${RUNNER_TEMP}/bws/${{ inputs.app_id_key }}")"
-        # Mask each line to prevent accidental log exposure.
+        app_id_file="${RUNNER_TEMP}/bws/${{ inputs.app_id_key }}"
+        pem_file="${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem"
+        output_file="${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
+        repo="${{ inputs.repo }}"
+        python3 .github/scripts/github_app_token.py \
+          --app-id-file "${app_id_file}" \
+          --pem-file "${pem_file}" \
+          --org "${{ inputs.github_org }}" \
+          --repo "${repo}" \
+          --output-file "${output_file}"
         if [ -n "${GITHUB_ACTIONS:-}" ]; then
-          printf '%s\n' "$pem" | while IFS= read -r line; do
-            [ -n "$line" ] && printf '%s\n' "::add-mask::$line"
-          done
-          [ -n "$app_id" ] && printf '%s\n' "::add-mask::$app_id"
+          printf '%s\n' "::add-mask::$(cat "${output_file}")"
         fi
-        {
-          printf '%s<<EOF\n' "GH_APP_PRIVATE_KEY"
-          printf '%s\n' "$pem"
-          printf 'EOF\n'
-          printf 'GH_APP_ID=%s\n' "$app_id"
-          printf 'GH_APP_ORG=%s\n' "${{ inputs.github_org }}"
-        } >> "$GITHUB_ENV"
-
-    - name: Mint GitHub App token
-      id: app-token
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ env.GH_APP_ID }}
-        private-key: ${{ env.GH_APP_PRIVATE_KEY }}
-        owner: ${{ env.GH_APP_ORG }}
-        repositories: ${{ inputs.repo }}
 
     - name: Store app token
       id: store-token
       shell: bash
       run: |
         set -euo pipefail
-        umask 077
         token_file="${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
-        if [ -n "${GITHUB_ACTIONS:-}" ]; then
-          printf '%s\n' "::add-mask::${{ steps.app-token.outputs.token }}"
-        fi
-        printf '%s' "${{ steps.app-token.outputs.token }}" > "$token_file"
         printf '%s\n' "GITHUB_APP_TOKEN_FILE=${token_file}" >> "$GITHUB_ENV"
         printf '%s\n' "github_app_token_file=${token_file}" >> "$GITHUB_OUTPUT"
-
-    - name: Clear app env
-      shell: bash
-      run: |
-        set -euo pipefail
-        {
-          printf '%s\n' "GH_APP_PRIVATE_KEY="
-          printf '%s\n' "GH_APP_ID="
-          printf '%s\n' "GH_APP_ORG="
-        } >> "$GITHUB_ENV"
