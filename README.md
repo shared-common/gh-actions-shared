@@ -41,10 +41,10 @@ Repo variable:
 
 Bitwarden Secrets Manager keys (secret name → ENV):
 
-All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed via `*_FILE` env vars (e.g., `GH_ORG_SHARED_PEM_FILE`).
+All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed via `*_FILE` env vars (e.g., `GH_ORG_SHARED_APP_PEM_FILE`).
 
 - `GH_ORG_SHARED_APP_ID`
-- `GH_ORG_SHARED_PEM`
+- `GH_ORG_SHARED_APP_PEM`
 - `GH_BRANCH_PREFIX`
 - `GH_BRANCH_PRODUCT`
 - `GH_BRANCH_STAGING`

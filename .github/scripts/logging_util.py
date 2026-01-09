@@ -9,7 +9,7 @@ from secret_env import read_optional_value
 _SECRET_KEYS = (
     "GITHUB_APP_TOKEN",
     "GL_TOKEN_DERIVED",
-    "GH_ORG_SHARED_PEM",
+    "GH_ORG_SHARED_APP_PEM",
     "GH_ORG_SHARED_APP_ID",
     "BWS_ACCESS_TOKEN",
 )

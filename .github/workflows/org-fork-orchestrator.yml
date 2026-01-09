@@ -123,7 +123,7 @@ jobs:
             GH_BRANCH_STAGING
             GH_BRANCH_SNAPSHOT
             GH_BRANCH_FEATURE
-            GH_ORG_SHARED_PEM
+            GH_ORG_SHARED_APP_PEM
           org_keys: |
             GH_ORG_TOOLS
             GH_ORG_SECOPS
@@ -132,7 +132,7 @@ jobs:
           github_org: ${{ matrix.github_org }}
           repo: ${{ inputs.repo }}
           app_id_key: GH_ORG_SHARED_APP_ID
-          app_pem_key: GH_ORG_SHARED_PEM
+          app_pem_key: GH_ORG_SHARED_APP_PEM
 
       - name: Validate INPUT_REPO
         shell: bash
@@ -145,7 +145,7 @@ jobs:
       - name: Run orchestrator
         env:
           INPUT_REPO: ${{ inputs.repo }}
-          GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_PEM.pem
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_PEM.pem
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
           GH_BRANCH_PRODUCT_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PRODUCT
@@ -160,7 +160,7 @@ jobs:
         if: always()
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
-          rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem" \
+          rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_APP_PEM.pem" \
                 "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
           rm -rf "${RUNNER_TEMP}/bws"
           for key in \
@@ -174,7 +174,7 @@ jobs:
             GH_BRANCH_STAGING_FILE \
             GH_BRANCH_SNAPSHOT_FILE \
             GH_BRANCH_FEATURE_FILE \
-            GH_ORG_SHARED_PEM_FILE \
+            GH_ORG_SHARED_APP_PEM_FILE \
             GITHUB_APP_TOKEN_FILE
           do
             printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"

@@ -136,7 +136,7 @@ jobs:
             GL_GROUP_SUB_SECOPS
             GL_GROUP_SUB_WIKI
             GL_GROUP_SUB_DIVERGE
-            GH_ORG_SHARED_PEM
+            GH_ORG_SHARED_APP_PEM
             GL_TOKEN_DERIVED
           org_keys: |
             GH_ORG_TOOLS
@@ -146,7 +146,7 @@ jobs:
           github_org: ${{ matrix.github_org }}
           repo: ${{ inputs.repo }}
           app_id_key: GH_ORG_SHARED_APP_ID
-          app_pem_key: GH_ORG_SHARED_PEM
+          app_pem_key: GH_ORG_SHARED_APP_PEM
           chmod_keys: |
             GL_TOKEN_DERIVED
 
@@ -162,7 +162,7 @@ jobs:
         id: gitlab-mirror
         env:
           INPUT_REPO: ${{ inputs.repo }}
-          GH_ORG_SHARED_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_PEM.pem
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_PEM.pem
           GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
           GH_BRANCH_PRODUCT_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PRODUCT
@@ -201,7 +201,7 @@ jobs:
         if: always()
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
-          rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem" \
+          rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_APP_PEM.pem" \
                 "${RUNNER_TEMP}/bws/GL_TOKEN_DERIVED" \
                 "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
           rm -rf "${RUNNER_TEMP}/bws"
@@ -221,7 +221,7 @@ jobs:
             GL_GROUP_SUB_SECOPS_FILE \
             GL_GROUP_SUB_WIKI_FILE \
             GL_GROUP_SUB_DIVERGE_FILE \
-            GH_ORG_SHARED_PEM_FILE \
+            GH_ORG_SHARED_APP_PEM_FILE \
             GL_TOKEN_DERIVED_FILE \
             GITHUB_APP_TOKEN_FILE
           do

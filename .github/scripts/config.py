@@ -55,7 +55,7 @@ _ORG_KEYS = (
 
 
 def _get_pem() -> str:
-    return read_required_secret_file("GH_ORG_SHARED_PEM")
+    return read_required_secret_file("GH_ORG_SHARED_APP_PEM")
 
 
 def _resolve_org() -> str:

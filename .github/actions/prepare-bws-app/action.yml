@@ -21,7 +21,7 @@ inputs:
   app_pem_key:
     description: "Secret name for the GitHub App PEM"
     required: false
-    default: "GH_ORG_SHARED_PEM"
+    default: "GH_ORG_SHARED_APP_PEM"
   chmod_keys:
     description: "Newline-delimited list of secret names to chmod 600"
     required: false
