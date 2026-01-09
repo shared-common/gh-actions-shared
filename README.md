@@ -4,7 +4,7 @@ Centralized GitHub Actions automation for keeping forked repos in sync without i
 
 ## What it does
 
-This repository runs scheduled workflows that:
+This repository runs workflows that:
 
 - discover forked repositories in the configured organization
 - sync each fork's `main` from its upstream via the GitHub merge-upstream API (fast-forward only)
@@ -75,14 +75,14 @@ Bitwarden Secrets Manager keys for org/group routing:
 
 ## Workflow schedule
 
-The workflows use static cron entries (GitHub Actions cannot take them from secrets):
-
-- `17 3 * * *`
-- `17 23 * * *`
+- `org-fork-orchestrator` runs on a schedule:
+  - `17 3 * * *`
+  - `17 23 * * *`
+- `gitlab-mirror` runs only when `org-fork-orchestrator` completes successfully, or via manual dispatch.
 
 ## Manual runs
 
-You can run the workflow manually and optionally target a single repo:
+You can run the workflows manually and optionally target a single repo:
 
 - `repo`: fork repository name (string)
 
@@ -105,9 +105,16 @@ GitLab protection rules (managed by the `gitlab-mirror` workflow when a project 
 
 Required Bitwarden Secrets Manager keys for GitLab mirroring (secret name → ENV):
 
-- `GL_TOKEN_MCZFORKS`
+- `GL_TOKEN_DERIVED`
 
 The GitLab token must include `api` scope so the workflow can create missing projects.
+
+## Token minting
+
+GitHub App installation tokens are minted locally via a JWT flow in
+`.github/scripts/github_app_token.py`. The PEM and App ID are read from
+`*_FILE` paths under `${RUNNER_TEMP}/bws`, and the access token is written to
+`${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN` with `0600` permissions.
 
 ## Files
 
@@ -120,7 +127,8 @@ The GitLab token must include `api` scope so the workflow can create missing pro
 - `.github/scripts/discover_repos.py`
 - `.github/scripts/sync_mirror.py`
 - `.github/scripts/ensure_branches.py`
-- `.github/scripts/merge_into_product.py`
+- `.github/scripts/github_app_token.py`
+- `.github/scripts/logging_util.py`
 - `.github/scripts/promote_ff_only.py`
 - `.github/scripts/issues.py`
 - `.github/scripts/summary.py`

@@ -12,6 +12,47 @@ import urllib.request
 from logging_util import redact_text
 
 MAX_SECRET_BYTES = 64 * 1024
+DEFAULT_ALLOWED_ENV = {
+    "BWS_ACCESS_TOKEN",
+    "BWS_PROJECT_ID",
+    "GITHUB_ACTIONS",
+    "GITHUB_ENV",
+    "GITHUB_OUTPUT",
+    "GITHUB_RUN_ID",
+    "GITHUB_RUN_NUMBER",
+    "GITHUB_RUN_ATTEMPT",
+    "GITHUB_WORKFLOW",
+    "GITHUB_JOB",
+    "GITHUB_REF",
+    "GITHUB_REF_NAME",
+    "GITHUB_SHA",
+    "GITHUB_REPOSITORY",
+    "GITHUB_SERVER_URL",
+    "GITHUB_API_URL",
+    "RUNNER_TEMP",
+    "RUNNER_OS",
+    "RUNNER_ARCH",
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "PYTHONPATH",
+    "pythonLocation",
+    "Python_ROOT_DIR",
+    "Python2_ROOT_DIR",
+    "Python3_ROOT_DIR",
+    "PKG_CONFIG_PATH",
+    "LD_LIBRARY_PATH",
+    "INPUT_REPO",
+}
+DEFAULT_ALLOWED_SUFFIXES = (
+    "_FILE",
+)
+DEFAULT_ALLOWED_PREFIXES = (
+    "ACTIONS_",
+    "GITHUB_",
+)
 
 
 def _b64url(data: bytes) -> str:
@@ -66,6 +107,12 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
         raise RuntimeError(f"GitHub API error ({exc.code}): {redact_text(body)}") from exc
 
 
+def _org_access(jwt_token: str, org: str) -> None:
+    data = _request("GET", f"https://api.github.com/orgs/{org}", jwt_token)
+    if not isinstance(data, dict) or data.get("login") != org:
+        raise RuntimeError("GitHub org access check failed")
+
+
 def _installation_id(jwt_token: str, org: str) -> int:
     data = _request("GET", f"https://api.github.com/orgs/{org}/installation", jwt_token)
     if not isinstance(data, dict) or not data.get("id"):
@@ -89,6 +136,34 @@ def _access_token(jwt_token: str, installation_id: int, repo: str | None) -> str
     return token
 
 
+def _is_allowed(
+    name: str,
+    allowed: set[str],
+    allowed_suffixes: tuple[str, ...],
+    allowed_prefixes: tuple[str, ...],
+) -> bool:
+    if name in allowed:
+        return True
+    if any(name.endswith(suffix) for suffix in allowed_suffixes):
+        return True
+    return any(name.startswith(prefix) for prefix in allowed_prefixes)
+
+
+def _assert_allowed_env(
+    allowed: set[str],
+    allowed_suffixes: tuple[str, ...],
+    allowed_prefixes: tuple[str, ...],
+) -> None:
+    denylist = {
+        k
+        for k, v in os.environ.items()
+        if v and not _is_allowed(k, allowed, allowed_suffixes, allowed_prefixes)
+    }
+    if denylist:
+        names = ", ".join(sorted(denylist))
+        raise RuntimeError(f"Unexpected env vars present: {names}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mint a GitHub App installation token.")
     parser.add_argument("--app-id-file", required=True)
@@ -96,7 +171,14 @@ def main() -> int:
     parser.add_argument("--org", required=True)
     parser.add_argument("--repo", default="")
     parser.add_argument("--output-file", required=True)
+    parser.add_argument("--policy-allowed-env", default="")
     args = parser.parse_args()
+
+    if args.policy_allowed_env:
+        allowed = {name.strip() for name in args.policy_allowed_env.split(",") if name.strip()}
+        _assert_allowed_env(allowed, DEFAULT_ALLOWED_SUFFIXES, DEFAULT_ALLOWED_PREFIXES)
+    else:
+        _assert_allowed_env(DEFAULT_ALLOWED_ENV, DEFAULT_ALLOWED_SUFFIXES, DEFAULT_ALLOWED_PREFIXES)
 
     if not os.path.exists(args.app_id_file):
         raise SystemExit(f"App ID file not found: {args.app_id_file}")
@@ -108,6 +190,7 @@ def main() -> int:
     if not os.path.exists(pem_path):
         raise SystemExit(f"PEM file not found: {pem_path}")
     jwt_token = _jwt(app_id, pem_path)
+    _org_access(jwt_token, args.org)
     installation_id = _installation_id(jwt_token, args.org)
     token = _access_token(jwt_token, installation_id, args.repo.strip() or None)
 
