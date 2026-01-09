@@ -361,11 +361,11 @@ def main() -> int:
         "snapshot_branch": cfg.snapshot_branch,
         "feature_branch": cfg.feature_branch,
     }
-        summary = format_summary(
-            config_summary,
-            [WORKFLOW_CRON_1, WORKFLOW_CRON_2],
-            results,
-        )
+    summary = format_summary(
+        config_summary,
+        [WORKFLOW_CRON_1, WORKFLOW_CRON_2],
+        results,
+    )
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as handle:
