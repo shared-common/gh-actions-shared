@@ -30,7 +30,7 @@ def format_summary(
         ("product_merge", "product_merge"),
         ("stage_promo", "staging_promo"),
         ("stage_compare", "staging_compare"),
-        ("downstream_target", "downstream_target"),
+        ("promotion_target", "promotion_target"),
         ("snap_promo", "snapshot_promo"),
         ("feat_promo", "feature_promo"),
         ("branch_bootstrap_error", "branch_bootstrap_error"),

@@ -289,10 +289,10 @@ def process_repo(
 
     if product_changed:
         parent_sha = _parent_sha(api, owner, name, product_sha_after)
-        downstream_target = parent_sha or product_sha_after
-        result["downstream_target"] = "parent" if parent_sha else "product (no parent)"
+        promotion_target = parent_sha or product_sha_after
+        result["promotion_target"] = "parent" if parent_sha else "product (no parent)"
 
-        compare_ps = compare_refs(api, owner, name, staging, downstream_target)
+        compare_ps = compare_refs(api, owner, name, staging, promotion_target)
         status_ps = _compare_status(compare_ps)
         compare_summary = {
             "status": status_ps,
@@ -308,21 +308,21 @@ def process_repo(
         if status_ps == "identical":
             result["staging_promo"] = "already at target"
         elif status_ps == "behind":
-            ff_update(api, owner, name, staging, _head_sha(compare_ps, downstream_target))
+            ff_update(api, owner, name, staging, _head_sha(compare_ps, promotion_target))
             result["staging_promo"] = "fast-forwarded to target"
         else:
-            _force_update(api, owner, name, staging, downstream_target)
+            _force_update(api, owner, name, staging, promotion_target)
             result["staging_promo"] = f"reset to target ({status_ps})"
 
-        compare_fs = compare_refs(api, owner, name, feature, downstream_target)
+        compare_fs = compare_refs(api, owner, name, feature, promotion_target)
         status_fs = _compare_status(compare_fs)
         if status_fs == "identical":
             result["feature_promo"] = "already at target"
         elif status_fs == "behind":
-            ff_update(api, owner, name, feature, _head_sha(compare_fs, downstream_target))
+            ff_update(api, owner, name, feature, _head_sha(compare_fs, promotion_target))
             result["feature_promo"] = "fast-forwarded to target"
         else:
-            _force_update(api, owner, name, feature, downstream_target)
+            _force_update(api, owner, name, feature, promotion_target)
             result["feature_promo"] = f"reset to target ({status_fs})"
     else:
         result["staging_promo"] = "skipped (no product change)"
