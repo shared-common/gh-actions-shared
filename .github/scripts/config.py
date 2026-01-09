@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from secret_env import has_env_or_file, read_required_secret_file, read_required_value
+from secret_env import ensure_file_env, has_env_or_file, read_required_secret_file, read_required_value
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,14 @@ def _resolve_org() -> str:
 
 
 def load_config() -> Config:
+    for key in _ORG_KEYS:
+        try:
+            ensure_file_env(key)
+        except ValueError:
+            continue
     org = _resolve_org()
+    for name in _REQUIRED_ENV:
+        ensure_file_env(name)
     missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")

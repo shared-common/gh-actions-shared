@@ -26,6 +26,20 @@ def read_required_value(name: str, *, allow_env: bool = True, max_bytes: int = M
     raise ValueError(f"Missing required env var: {name}")
 
 
+def ensure_file_env(name: str) -> str:
+    file_key = f"{name}_FILE"
+    file_path = os.environ.get(file_key)
+    if file_path:
+        return file_path
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if runner_temp:
+        candidate = os.path.join(runner_temp, "bws", name)
+        if os.path.exists(candidate):
+            os.environ[file_key] = candidate
+            return candidate
+    raise ValueError(f"Missing required env var: {file_key}")
+
+
 def read_required_secret_file(name: str, *, max_bytes: int = MAX_SECRET_BYTES) -> str:
     return read_required_value(name, allow_env=False, max_bytes=max_bytes)
 

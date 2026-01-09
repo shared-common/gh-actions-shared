@@ -77,7 +77,9 @@ jobs:
           for key in GH_ORG_TOOLS GH_ORG_SECOPS GH_ORG_WIKI GH_ORG_DIVERGE \
             GL_GROUP_TOP_DERIVED GL_GROUP_SUB_TOOLS GL_GROUP_SUB_SECOPS GL_GROUP_SUB_WIKI GL_GROUP_SUB_DIVERGE
           do
-            printf '%s\n' "${key}_FILE=${RUNNER_TEMP}/bws/${key}" >> "$GITHUB_ENV"
+            file_path="${RUNNER_TEMP}/bws/${key}"
+            export "${key}_FILE=${file_path}"
+            printf '%s\n' "${key}_FILE=${file_path}" >> "$GITHUB_ENV"
           done
           /bin/sh .github/scripts/build_gitlab_matrix.sh | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 

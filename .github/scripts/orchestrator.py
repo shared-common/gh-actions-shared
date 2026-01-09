@@ -10,6 +10,7 @@ from github_api import GitHubApi, GitHubApiError
 from issues import create_or_update_issue
 from promote_ff_only import compare_refs, ff_update
 from summary import format_summary
+from logging_util import log_event, redact_text
 from sync_mirror import sync_mirror
 from ensure_branches import ensure_branch
 from secret_env import read_required_secret_file
@@ -211,7 +212,7 @@ def process_repo(
         result.update(
             {
                 "branch_bootstrap": "error",
-                "branch_bootstrap_error": str(exc),
+                "branch_bootstrap_error": redact_text(str(exc)),
                 "issue": _format_issue_action(issue),
             }
         )
@@ -239,7 +240,7 @@ def process_repo(
         result.update(
             {
                 "branch_bootstrap": "error",
-                "branch_bootstrap_error": str(exc),
+                "branch_bootstrap_error": redact_text(str(exc)),
                 "issue": _format_issue_action(issue),
             }
         )
@@ -360,17 +361,23 @@ def main() -> int:
         "snapshot_branch": cfg.snapshot_branch,
         "feature_branch": cfg.feature_branch,
     }
-    summary = format_summary(
-        config_summary,
-        [WORKFLOW_CRON_1, WORKFLOW_CRON_2],
-        results,
-    )
+        summary = format_summary(
+            config_summary,
+            [WORKFLOW_CRON_1, WORKFLOW_CRON_2],
+            results,
+        )
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as handle:
             handle.write(summary)
             handle.write("\n")
     else:
+        log_event(
+            "orchestrator_summary",
+            org=cfg.org,
+            repos=len(results),
+            notes="summary printed to stdout",
+        )
         print(summary)
 
     return 0

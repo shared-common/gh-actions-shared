@@ -15,11 +15,13 @@ from typing import Any, Dict, List, Optional
 from discover_repos import discover_fork_repos
 from github_api import GitHubApi, GitHubApiError
 from secret_env import (
+    ensure_file_env,
     has_env_or_file,
     read_optional_value,
     read_required_secret_file,
     read_required_value,
 )
+from logging_util import log_event, redact_text
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,12 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_WIKI": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_WIKI"),
         "GH_ORG_DIVERGE": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_DIVERGE"),
     }
+    for org_key, (group_key, subgroup_key) in org_map.items():
+        for key in (org_key, group_key, subgroup_key):
+            try:
+                ensure_file_env(key)
+            except ValueError:
+                continue
     org_values = {key: read_optional_value(key, allow_env=False) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
     if not active_orgs:
@@ -100,6 +108,8 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
 
 def load_config() -> GitLabConfig:
     github_org, gitlab_group, gitlab_subgroup = _resolve_org_and_group()
+    for name in _REQUIRED_ENV:
+        ensure_file_env(name)
     missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
@@ -300,7 +310,13 @@ def _validate_branch_name(name: str) -> None:
 
 
 def _validate_branch_config(cfg: GitLabConfig) -> None:
-    for name in (cfg.github_prefix, cfg.github_product_branch, cfg.github_staging_branch, cfg.github_feature_branch, cfg.github_release_branch):
+    for name in (
+        cfg.github_prefix,
+        cfg.github_product_branch,
+        cfg.github_staging_branch,
+        cfg.github_feature_branch,
+        cfg.github_release_branch,
+    ):
         _validate_branch_name(name)
 
 def _ensure_gitlab_project(api: GitLabApi, cfg: GitLabConfig, repo: str) -> str:
@@ -519,19 +535,19 @@ def process_repo(
             result["gitlab_default_branch"] = "skipped: branch missing"
 
         # Final branch presence check (API-based)
-    for branch in [
-        f"github/{product_ref}",
-        f"github/{staging_ref}",
-        product_ref,
-        staging_ref,
-        feature_ref,
-        release_ref,
-    ]:
-        try:
-            present = _gitlab_branch_exists(gitlab_api, cfg, name, branch)
-            branch_presence[branch] = "present" if present else "missing"
-        except GitLabApiError as exc:
-            branch_presence[branch] = f"error ({exc.status})"
+        for branch in [
+            f"github/{product_ref}",
+            f"github/{staging_ref}",
+            product_ref,
+            staging_ref,
+            feature_ref,
+            release_ref,
+        ]:
+            try:
+                present = _gitlab_branch_exists(gitlab_api, cfg, name, branch)
+                branch_presence[branch] = "present" if present else "missing"
+            except GitLabApiError as exc:
+                branch_presence[branch] = f"error ({exc.status})"
 
         result["gitlab_mirror"] = mirror_results
         result["gitlab_dev_branches"] = dev_results
@@ -619,7 +635,7 @@ def main() -> int:
             result = process_repo(api, cfg, repo)
         except Exception as exc:
             name = repo.get("name") if isinstance(repo, dict) else None
-            result = {"name": name, "notes": [f"Skipped: processing error ({exc})"]}
+            result = {"name": name, "notes": [f"Skipped: processing error ({redact_text(str(exc))})"]}
         if isinstance(result, dict):
             results.append(result)
         else:
@@ -635,6 +651,7 @@ def main() -> int:
             handle.write(summary)
             handle.write("\n")
     else:
+        log_event("gitlab_mirror_summary", org=cfg.github_org, repos=len(results))
         print(summary)
 
     output_path = os.environ.get("GITHUB_OUTPUT")

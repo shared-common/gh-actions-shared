@@ -12,11 +12,13 @@ from typing import Any, Dict, List, Optional
 from discover_repos import discover_fork_repos
 from github_api import GitHubApi, GitHubApiError
 from secret_env import (
+    ensure_file_env,
     has_env_or_file,
     read_optional_value,
     read_required_secret_file,
     read_required_value,
 )
+from logging_util import log_event, redact_text
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,12 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_WIKI": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_WIKI"),
         "GH_ORG_DIVERGE": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_DIVERGE"),
     }
+    for org_key, (group_key, subgroup_key) in org_map.items():
+        for key in (org_key, group_key, subgroup_key):
+            try:
+                ensure_file_env(key)
+            except ValueError:
+                continue
     org_values = {key: read_optional_value(key, allow_env=False) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
     if not active_orgs:
@@ -136,6 +144,8 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
 
 def load_config() -> GitLabProtectionConfig:
     github_org, gitlab_group, gitlab_subgroup = _resolve_org_and_group()
+    for name in _REQUIRED_ENV:
+        ensure_file_env(name)
     missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
@@ -226,7 +236,7 @@ def process_repo(
     try:
         _gitlab_project_id(cfg, name)
     except Exception as exc:  # noqa: BLE001 - safe summary path
-        result["notes"] = [f"Skipped: invalid gitlab project ({exc})"]
+        result["notes"] = [f"Skipped: invalid gitlab project ({redact_text(str(exc))})"]
         return result
 
     try:
@@ -306,6 +316,7 @@ def main() -> int:
             handle.write(summary)
             handle.write("\n")
     else:
+        log_event("gitlab_branch_protection_summary", org=cfg.github_org, repos=len(results))
         print(summary)
 
     return 0
