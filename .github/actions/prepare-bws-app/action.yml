@@ -89,12 +89,13 @@ runs:
         src="${secrets_dir}/${app_pem_key}"
         dst="${secrets_dir}/${app_pem_key}.pem"
         umask 077
-        data="$(cat "$src")"
-        if printf '%s' "$data" | grep -q '\\n'; then
+        if grep -q '\\n' "$src"; then
+          data="$(cat "$src")"
           printf '%b' "$data" > "$dst"
         else
-          printf '%s' "$data" > "$dst"
+          cp "$src" "$dst"
         fi
+        chmod 600 "$dst"
         chmod 600 "$dst"
         printf '%s\n' "${app_pem_key}_FILE=${dst}" >> "$GITHUB_ENV"
         printf '%s\n' "${app_id_key}_FILE=${secrets_dir}/${app_id_key}" >> "$GITHUB_ENV"
@@ -148,7 +149,6 @@ runs:
           printf 'GH_APP_ID=%s\n' "$app_id"
           printf 'GH_APP_ORG=%s\n' "${{ inputs.github_org }}"
         } >> "$GITHUB_ENV"
-        rm -f "${RUNNER_TEMP}/bws/${{ inputs.app_pem_key }}.pem"
 
     - name: Mint GitHub App token
       id: app-token
