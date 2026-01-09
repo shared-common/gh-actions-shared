@@ -61,11 +61,14 @@ jobs:
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+          BWS_NO_MASK_KEYS: >-
+            GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE,GL_GROUP_TOP_DERIVED,GL_GROUP_SUB_TOOLS,GL_GROUP_SUB_SECOPS,GL_GROUP_SUB_WIKI,GL_GROUP_SUB_DIVERGE
         run: |
           set -euo pipefail
           umask 077
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" \
+            env BWS_NO_MASK_KEYS="${BWS_NO_MASK_KEYS:-}" \
             /bin/sh .github/scripts/bws_export_secret_files.sh "${RUNNER_TEMP}/bws" \
               GH_ORG_TOOLS \
               GH_ORG_SECOPS \
@@ -172,6 +175,33 @@ jobs:
           set +a
           python3 .github/scripts/gitlab_mirror.py
 
+      - name: Scope secrets for protections
+        if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          secrets_dir="${RUNNER_TEMP}/bws"
+          exports_file="${secrets_dir}/exports-protect.env"
+          : > "${exports_file}"
+          for key in \
+            GH_BRANCH_PREFIX \
+            GH_BRANCH_STAGING \
+            GH_ORG_TOOLS \
+            GH_ORG_SECOPS \
+            GH_ORG_WIKI \
+            GH_ORG_DIVERGE \
+            GL_GROUP_TOP_DERIVED \
+            GL_GROUP_SUB_TOOLS \
+            GL_GROUP_SUB_SECOPS \
+            GL_GROUP_SUB_WIKI \
+            GL_GROUP_SUB_DIVERGE \
+            GITHUB_APP_TOKEN \
+            GL_TOKEN_DERIVED
+          do
+            printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
+          done
+          chmod 600 "${exports_file}"
+
       - name: Apply protections
         if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
         env:
@@ -179,7 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           set -a
-          . "${{ steps.bws.outputs.bws_env_file }}"
+          . "${RUNNER_TEMP}/bws/exports-protect.env"
           set +a
           python3 .github/scripts/gitlab_branch_protection.py
 

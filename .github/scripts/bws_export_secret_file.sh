@@ -17,3 +17,16 @@ fi
 mkdir -p "$(dirname "$out_path")"
 printf '%s' "$value" > "$out_path"
 chmod 600 "$out_path"
+
+no_mask_keys="${BWS_NO_MASK_KEYS:-}"
+if [ -n "$no_mask_keys" ]; then
+  case ",${no_mask_keys}," in
+    *,"${key}",*) exit 0 ;;
+  esac
+fi
+
+printf '%s\n' "$value" | while IFS= read -r line; do
+  if [ -n "$line" ]; then
+    printf '::add-mask::%s\n' "$line"
+  fi
+done
