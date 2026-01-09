@@ -144,6 +144,19 @@ jobs:
             GL_GROUP_SUB_DIVERGE
             GH_ORG_SHARED_APP_PEM
             GL_TOKEN_DERIVED
+          scoped_keys: |
+            GH_BRANCH_PREFIX
+            GH_BRANCH_PRODUCT
+            GH_BRANCH_STAGING
+            GH_BRANCH_FEATURE
+            GH_BRANCH_RELEASE
+            GL_GROUP_TOP_DERIVED
+            GL_GROUP_SUB_TOOLS
+            GL_GROUP_SUB_SECOPS
+            GL_GROUP_SUB_WIKI
+            GL_GROUP_SUB_DIVERGE
+            GL_TOKEN_DERIVED
+            GITHUB_APP_TOKEN
           org_keys: |
             GH_ORG_TOOLS
             GH_ORG_SECOPS
@@ -186,6 +199,7 @@ jobs:
           for key in \
             GH_BRANCH_PREFIX \
             GH_BRANCH_STAGING \
+            GH_BRANCH_RELEASE \
             GH_ORG_TOOLS \
             GH_ORG_SECOPS \
             GH_ORG_WIKI \

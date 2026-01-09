@@ -19,6 +19,7 @@ from secret_env import (
     read_required_value,
 )
 from logging_util import log_event, redact_text
+from ref_validation import validate_ref_names
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class GitLabProtectionConfig:
     github_org: str
     github_prefix: str
     github_staging_branch: str
+    github_release_branch: str
     gitlab_token: str
     gitlab_group: str
     gitlab_subgroup: str
@@ -37,7 +39,7 @@ class GitLabProtectionConfig:
 
     @property
     def release_ref(self) -> str:
-        return f"{self.github_prefix}/release"
+        return f"{self.github_prefix}/{self.github_release_branch}"
 
     def gitlab_project_path(self, repo: str) -> str:
         return f"{self.gitlab_group}/{self.gitlab_subgroup}/{repo}.git"
@@ -46,6 +48,7 @@ class GitLabProtectionConfig:
 _REQUIRED_ENV = {
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_STAGING",
+    "GH_BRANCH_RELEASE",
     "GITHUB_APP_TOKEN",
     "GL_TOKEN_DERIVED_FILE",
 }
@@ -147,10 +150,24 @@ def load_config() -> GitLabProtectionConfig:
         github_org=github_org,
         github_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=False),
         github_staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=False),
+        github_release_branch=read_required_value("GH_BRANCH_RELEASE", allow_env=False),
         gitlab_token=read_required_secret_file("GL_TOKEN_DERIVED"),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
         gitlab_host=read_optional_value("GL_HOST", allow_env=True) or "gitlab.com",
+    )
+
+
+def _validate_branch_config(cfg: GitLabProtectionConfig) -> None:
+    validate_ref_names(
+        (
+            cfg.github_prefix,
+            cfg.github_staging_branch,
+            cfg.github_release_branch,
+            cfg.staging_ref,
+            cfg.release_ref,
+        ),
+        label="branch",
     )
 
 
@@ -297,6 +314,7 @@ def main() -> int:
     if repo_filter:
         repo_filter = repo_filter.strip() or None
     cfg = load_config()
+    _validate_branch_config(cfg)
     api = GitHubApi(token=token)
     repos = discover_fork_repos(api, cfg.github_org, repo_filter)
     results: List[Dict[str, Any]] = []

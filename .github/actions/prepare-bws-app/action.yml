@@ -22,6 +22,10 @@ inputs:
     description: "Secret name for the GitHub App PEM"
     required: false
     default: "GH_ORG_SHARED_APP_PEM"
+  scoped_keys:
+    description: "Newline-delimited list of secret names to export into bws_env_file"
+    required: false
+    default: ""
   chmod_keys:
     description: "Newline-delimited list of secret names to chmod 600"
     required: false
@@ -73,15 +77,16 @@ runs:
         secrets_dir="${RUNNER_TEMP}/bws"
         exports_file="${secrets_dir}/exports.env"
         : > "${exports_file}"
-        skip_keys="$(printf '%s\n' "${{ inputs.org_keys }}" "${{ inputs.app_pem_key }}" "${{ inputs.app_id_key }}" | sed '/^$/d')"
+        scoped_keys="${{ inputs.scoped_keys }}"
+        if [ -z "$scoped_keys" ]; then
+          printf '%s\n' "No scoped_keys provided" >&2
+          exit 1
+        fi
         while IFS= read -r key; do
           [ -z "$key" ] && continue
-          if printf '%s\n' "$skip_keys" | grep -qx "$key"; then
-            continue
-          fi
           printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
         done <<'EOF'
-        ${{ inputs.secrets }}
+        ${{ inputs.scoped_keys }}
         EOF
 
     - name: Prepare app credentials

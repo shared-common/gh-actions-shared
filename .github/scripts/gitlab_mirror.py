@@ -22,6 +22,7 @@ from secret_env import (
     read_required_value,
 )
 from logging_util import log_event, redact_text
+from ref_validation import validate_ref_names
 
 
 @dataclass(frozen=True)
@@ -294,24 +295,21 @@ def _gitlab_branch_exists(api: GitLabApi, cfg: GitLabConfig, repo: str, branch: 
         raise
 
 
-def _validate_branch_name(name: str) -> None:
-    if not name:
-        raise ValueError("Branch name is empty")
-    if name.strip("/") != name:
-        raise ValueError(f"Branch name has leading/trailing slash: {name}")
-    if "//" in name:
-        raise ValueError(f"Branch name contains //: {name}")
-
-
 def _validate_branch_config(cfg: GitLabConfig) -> None:
-    for name in (
-        cfg.github_prefix,
-        cfg.github_product_branch,
-        cfg.github_staging_branch,
-        cfg.github_feature_branch,
-        cfg.github_release_branch,
-    ):
-        _validate_branch_name(name)
+    validate_ref_names(
+        (
+            cfg.github_prefix,
+            cfg.github_product_branch,
+            cfg.github_staging_branch,
+            cfg.github_feature_branch,
+            cfg.github_release_branch,
+            cfg.product_ref,
+            cfg.staging_ref,
+            cfg.feature_ref,
+            cfg.release_ref,
+        ),
+        label="branch",
+    )
 
 def _ensure_gitlab_project(api: GitLabApi, cfg: GitLabConfig, repo: str) -> str:
     project_id = _gitlab_project_id(cfg, repo)

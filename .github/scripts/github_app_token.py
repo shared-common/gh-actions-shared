@@ -197,6 +197,9 @@ def main() -> int:
     else:
         _assert_allowed_env(DEFAULT_ALLOWED_ENV, DEFAULT_ALLOWED_SUFFIXES, DEFAULT_ALLOWED_PREFIXES)
 
+    if not args.org.strip():
+        raise SystemExit("GitHub org is required and must be non-empty")
+
     if not os.path.exists(args.app_id_file):
         raise SystemExit(f"App ID file not found: {args.app_id_file}")
     if os.path.getsize(args.app_id_file) > MAX_SECRET_BYTES:

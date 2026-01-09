@@ -14,9 +14,21 @@ if [ -z "$value" ]; then
   exit 1
 fi
 
+max_bytes="${MAX_SECRET_BYTES:-65536}"
+value_bytes="$(printf '%s' "$value" | wc -c | tr -d '[:space:]')"
+if [ -z "$value_bytes" ] || [ "$value_bytes" -gt "$max_bytes" ]; then
+  printf '%s\n' "Secret too large: $key" >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$out_path")"
 printf '%s' "$value" > "$out_path"
 chmod 600 "$out_path"
+out_bytes="$(wc -c < "$out_path" | tr -d '[:space:]')"
+if [ -z "$out_bytes" ] || [ "$out_bytes" -gt "$max_bytes" ]; then
+  printf '%s\n' "Secret file too large: $out_path" >&2
+  exit 1
+fi
 
 no_mask_keys="${BWS_NO_MASK_KEYS:-}"
 if [ -n "$no_mask_keys" ]; then
@@ -30,3 +42,6 @@ printf '%s\n' "$value" | while IFS= read -r line; do
     printf '::add-mask::%s\n' "$line"
   fi
 done
+if [ -n "$value" ]; then
+  printf '::add-mask::%s\n' "$value"
+fi
