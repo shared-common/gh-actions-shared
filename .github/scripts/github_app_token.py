@@ -53,6 +53,14 @@ DEFAULT_ALLOWED_PREFIXES = (
     "ACTIONS_",
     "GITHUB_",
 )
+SENSITIVE_NAME_MARKERS = (
+    "TOKEN",
+    "SECRET",
+    "KEY",
+    "PASSWORD",
+    "CREDENTIAL",
+    "AUTH",
+)
 
 
 def _b64url(data: bytes) -> str:
@@ -154,11 +162,15 @@ def _assert_allowed_env(
     allowed_suffixes: tuple[str, ...],
     allowed_prefixes: tuple[str, ...],
 ) -> None:
-    denylist = {
-        k
-        for k, v in os.environ.items()
-        if v and not _is_allowed(k, allowed, allowed_suffixes, allowed_prefixes)
-    }
+    denylist = set()
+    for key, value in os.environ.items():
+        if not value:
+            continue
+        if _is_allowed(key, allowed, allowed_suffixes, allowed_prefixes):
+            continue
+        upper = key.upper()
+        if any(marker in upper for marker in SENSITIVE_NAME_MARKERS):
+            denylist.add(key)
     if denylist:
         names = ", ".join(sorted(denylist))
         raise RuntimeError(f"Unexpected env vars present: {names}")
