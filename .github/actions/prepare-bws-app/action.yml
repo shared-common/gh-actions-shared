@@ -69,6 +69,8 @@ runs:
         set -euo pipefail
         secrets_dir="${RUNNER_TEMP}/bws"
         skip_keys="$(printf '%s\n' "${{ inputs.org_keys }}" | sed '/^$/d')"
+        skip_keys="${skip_keys}
+${{ inputs.app_pem_key }}"
         while IFS= read -r key; do
           [ -z "$key" ] && continue
           if printf '%s\n' "$skip_keys" | grep -qx "$key"; then
@@ -95,7 +97,6 @@ runs:
         else
           cp "$src" "$dst"
         fi
-        chmod 600 "$dst"
         chmod 600 "$dst"
         printf '%s\n' "${app_pem_key}_FILE=${dst}" >> "$GITHUB_ENV"
         printf '%s\n' "${app_id_key}_FILE=${secrets_dir}/${app_id_key}" >> "$GITHUB_ENV"
