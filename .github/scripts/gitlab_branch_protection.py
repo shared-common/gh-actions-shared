@@ -46,7 +46,7 @@ class GitLabProtectionConfig:
 _REQUIRED_ENV = {
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_STAGING",
-    "GITHUB_APP_TOKEN_FILE",
+    "GITHUB_APP_TOKEN",
     "GL_TOKEN_DERIVED_FILE",
 }
 
