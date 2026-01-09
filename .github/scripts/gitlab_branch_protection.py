@@ -45,7 +45,7 @@ _REQUIRED_ENV = {
     "GH_BRANCH_PREFIX",
     "GH_BRANCH_STAGING",
     "GITHUB_APP_TOKEN_FILE",
-    "GL_TOKEN_MCZFORKS_FILE",
+    "GL_TOKEN_DERIVED_FILE",
 }
 
 
@@ -107,15 +107,15 @@ def _github_token() -> str:
 
 
 def _gitlab_token() -> str:
-    return read_required_secret_file("GL_TOKEN_MCZFORKS")
+    return read_required_secret_file("GL_TOKEN_DERIVED")
 
 
 def _resolve_org_and_group() -> tuple[str, str, str]:
     org_map = {
-        "GH_ORG_TBOX": ("GL_GROUP_ZFORKS", "GL_GROUP_TBOX"),
-        "GH_ORG_SECOPS": ("GL_GROUP_ZFORKS", "GL_GROUP_SECOPS"),
-        "GH_ORG_WIKI": ("GL_GROUP_ZFORKS", "GL_GROUP_WIKI"),
-        "GH_ORG_DIVERGE": ("GL_GROUP_ZFORKS", "GL_GROUP_DIVERGE"),
+        "GH_ORG_TOOLS": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_TOOLS"),
+        "GH_ORG_SECOPS": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_SECOPS"),
+        "GH_ORG_WIKI": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_WIKI"),
+        "GH_ORG_DIVERGE": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_DIVERGE"),
     }
     org_values = {key: read_optional_value(key) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
@@ -143,7 +143,7 @@ def load_config() -> GitLabProtectionConfig:
         github_org=github_org,
         github_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=True),
         github_staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=True),
-        gitlab_token=read_required_secret_file("GL_TOKEN_MCZFORKS"),
+        gitlab_token=read_required_secret_file("GL_TOKEN_DERIVED"),
         gitlab_group=gitlab_group,
         gitlab_subgroup=gitlab_subgroup,
         gitlab_host=read_optional_value("GL_HOST") or "gitlab.com",

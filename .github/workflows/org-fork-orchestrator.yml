@@ -103,7 +103,7 @@ jobs:
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
-            GH_ORG_TBOX
+            GH_ORG_TOOLS
             GH_ORG_SECOPS
             GH_ORG_WIKI
             GH_ORG_DIVERGE
@@ -114,7 +114,7 @@ jobs:
             GH_BRANCH_FEATURE
             GH_ORG_SHARED_PEM
           org_keys: |
-            GH_ORG_TBOX
+            GH_ORG_TOOLS
             GH_ORG_SECOPS
             GH_ORG_WIKI
             GH_ORG_DIVERGE
@@ -154,7 +154,7 @@ jobs:
           rm -rf "${RUNNER_TEMP}/bws"
           for key in \
             GH_ORG_SHARED_APP_ID_FILE \
-            GH_ORG_TBOX_FILE \
+            GH_ORG_TOOLS_FILE \
             GH_ORG_SECOPS_FILE \
             GH_ORG_WIKI_FILE \
             GH_ORG_DIVERGE_FILE \

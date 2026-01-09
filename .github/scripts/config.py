@@ -47,7 +47,7 @@ _REQUIRED_ENV = {
 }
 
 _ORG_KEYS = (
-    "GH_ORG_TBOX",
+    "GH_ORG_TOOLS",
     "GH_ORG_SECOPS",
     "GH_ORG_WIKI",
     "GH_ORG_DIVERGE",

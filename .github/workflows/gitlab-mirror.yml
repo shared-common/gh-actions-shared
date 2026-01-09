@@ -64,15 +64,15 @@ jobs:
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" \
             /bin/sh -c 'sh .github/scripts/bws_export_env_unmasked.sh \
-              GH_ORG_TBOX \
+              GH_ORG_TOOLS \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \
               GH_ORG_DIVERGE \
-              GL_GROUP_ZFORKS \
-              GL_GROUP_TBOX \
-              GL_GROUP_SECOPS \
-              GL_GROUP_WIKI \
-              GL_GROUP_DIVERGE \
+              GL_GROUP_TOP_DERIVED \
+              GL_GROUP_SUB_TOOLS \
+              GL_GROUP_SUB_SECOPS \
+              GL_GROUP_SUB_WIKI \
+              GL_GROUP_SUB_DIVERGE \
               ; .github/scripts/build_gitlab_matrix.sh' | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   mirror:
@@ -114,7 +114,7 @@ jobs:
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
-            GH_ORG_TBOX
+            GH_ORG_TOOLS
             GH_ORG_SECOPS
             GH_ORG_WIKI
             GH_ORG_DIVERGE
@@ -123,15 +123,15 @@ jobs:
             GH_BRANCH_STAGING
             GH_BRANCH_FEATURE
             GH_BRANCH_RELEASE
-            GL_GROUP_ZFORKS
-            GL_GROUP_TBOX
-            GL_GROUP_SECOPS
-            GL_GROUP_WIKI
-            GL_GROUP_DIVERGE
+            GL_GROUP_TOP_DERIVED
+            GL_GROUP_SUB_TOOLS
+            GL_GROUP_SUB_SECOPS
+            GL_GROUP_SUB_WIKI
+            GL_GROUP_SUB_DIVERGE
             GH_ORG_SHARED_PEM
-            GL_TOKEN_MCZFORKS
+            GL_TOKEN_DERIVED
           org_keys: |
-            GH_ORG_TBOX
+            GH_ORG_TOOLS
             GH_ORG_SECOPS
             GH_ORG_WIKI
             GH_ORG_DIVERGE
@@ -140,7 +140,7 @@ jobs:
           app_id_key: GH_ORG_SHARED_APP_ID
           app_pem_key: GH_ORG_SHARED_PEM
           chmod_keys: |
-            GL_TOKEN_MCZFORKS
+            GL_TOKEN_DERIVED
 
       - name: Validate INPUT_REPO
         shell: bash
@@ -161,13 +161,13 @@ jobs:
           GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
           GH_BRANCH_FEATURE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_FEATURE
           GH_BRANCH_RELEASE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_RELEASE
-          GL_GROUP_ZFORKS_FILE: ${{ runner.temp }}/bws/GL_GROUP_ZFORKS
-          GL_GROUP_TBOX_FILE: ${{ runner.temp }}/bws/GL_GROUP_TBOX
-          GL_GROUP_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SECOPS
-          GL_GROUP_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_WIKI
-          GL_GROUP_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_DIVERGE
+          GL_GROUP_TOP_DERIVED_FILE: ${{ runner.temp }}/bws/GL_GROUP_TOP_DERIVED
+          GL_GROUP_SUB_TOOLS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_TOOLS
+          GL_GROUP_SUB_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_SECOPS
+          GL_GROUP_SUB_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_WIKI
+          GL_GROUP_SUB_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_DIVERGE
           GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
-          GL_TOKEN_MCZFORKS_FILE: ${{ runner.temp }}/bws/GL_TOKEN_MCZFORKS
+          GL_TOKEN_DERIVED_FILE: ${{ runner.temp }}/bws/GL_TOKEN_DERIVED
         run: |
           python3 .github/scripts/gitlab_mirror.py
 
@@ -179,13 +179,13 @@ jobs:
           GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
           GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
           GH_BRANCH_RELEASE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_RELEASE
-          GL_GROUP_ZFORKS_FILE: ${{ runner.temp }}/bws/GL_GROUP_ZFORKS
-          GL_GROUP_TBOX_FILE: ${{ runner.temp }}/bws/GL_GROUP_TBOX
-          GL_GROUP_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SECOPS
-          GL_GROUP_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_WIKI
-          GL_GROUP_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_DIVERGE
+          GL_GROUP_TOP_DERIVED_FILE: ${{ runner.temp }}/bws/GL_GROUP_TOP_DERIVED
+          GL_GROUP_SUB_TOOLS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_TOOLS
+          GL_GROUP_SUB_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_SECOPS
+          GL_GROUP_SUB_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_WIKI
+          GL_GROUP_SUB_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_DIVERGE
           GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
-          GL_TOKEN_MCZFORKS_FILE: ${{ runner.temp }}/bws/GL_TOKEN_MCZFORKS
+          GL_TOKEN_DERIVED_FILE: ${{ runner.temp }}/bws/GL_TOKEN_DERIVED
         run: |
           python3 .github/scripts/gitlab_branch_protection.py
 
@@ -194,12 +194,12 @@ jobs:
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_PEM.pem" \
-                "${RUNNER_TEMP}/bws/GL_TOKEN_MCZFORKS" \
+                "${RUNNER_TEMP}/bws/GL_TOKEN_DERIVED" \
                 "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
           rm -rf "${RUNNER_TEMP}/bws"
           for key in \
             GH_ORG_SHARED_APP_ID_FILE \
-            GH_ORG_TBOX_FILE \
+            GH_ORG_TOOLS_FILE \
             GH_ORG_SECOPS_FILE \
             GH_ORG_WIKI_FILE \
             GH_ORG_DIVERGE_FILE \
@@ -208,13 +208,13 @@ jobs:
             GH_BRANCH_STAGING_FILE \
             GH_BRANCH_FEATURE_FILE \
             GH_BRANCH_RELEASE_FILE \
-            GL_GROUP_ZFORKS_FILE \
-            GL_GROUP_TBOX_FILE \
-            GL_GROUP_SECOPS_FILE \
-            GL_GROUP_WIKI_FILE \
-            GL_GROUP_DIVERGE_FILE \
+            GL_GROUP_TOP_DERIVED_FILE \
+            GL_GROUP_SUB_TOOLS_FILE \
+            GL_GROUP_SUB_SECOPS_FILE \
+            GL_GROUP_SUB_WIKI_FILE \
+            GL_GROUP_SUB_DIVERGE_FILE \
             GH_ORG_SHARED_PEM_FILE \
-            GL_TOKEN_MCZFORKS_FILE \
+            GL_TOKEN_DERIVED_FILE \
             GITHUB_APP_TOKEN_FILE
           do
             printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
