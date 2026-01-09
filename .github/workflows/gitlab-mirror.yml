@@ -81,7 +81,6 @@ jobs:
           do
             file_path="${RUNNER_TEMP}/bws/${key}"
             export "${key}_FILE=${file_path}"
-            printf '%s\n' "${key}_FILE=${file_path}" >> "$GITHUB_ENV"
           done
           /bin/sh .github/scripts/build_gitlab_matrix.sh | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
@@ -118,6 +117,7 @@ jobs:
           sha256: "9077fb7b336a62abc8194728fea8753afad8b0baa3a18723fc05fc02fdb53568"
 
       - name: Prepare BWS app credentials
+        id: bws
         uses: ./.github/actions/prepare-bws-app
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
@@ -165,39 +165,22 @@ jobs:
         id: gitlab-mirror
         env:
           INPUT_REPO: ${{ inputs.repo }}
-          GH_ORG_SHARED_APP_PEM_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_PEM.pem
-          GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
-          GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
-          GH_BRANCH_PRODUCT_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PRODUCT
-          GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
-          GH_BRANCH_FEATURE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_FEATURE
-          GH_BRANCH_RELEASE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_RELEASE
-          GL_GROUP_TOP_DERIVED_FILE: ${{ runner.temp }}/bws/GL_GROUP_TOP_DERIVED
-          GL_GROUP_SUB_TOOLS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_TOOLS
-          GL_GROUP_SUB_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_SECOPS
-          GL_GROUP_SUB_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_WIKI
-          GL_GROUP_SUB_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_DIVERGE
-          GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
-          GL_TOKEN_DERIVED_FILE: ${{ runner.temp }}/bws/GL_TOKEN_DERIVED
         run: |
+          set -euo pipefail
+          set -a
+          . "${{ steps.bws.outputs.bws_env_file }}"
+          set +a
           python3 .github/scripts/gitlab_mirror.py
 
       - name: Apply protections
         if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
         env:
           INPUT_REPO: ${{ inputs.repo }}
-          GH_ORG_SHARED_APP_ID_FILE: ${{ runner.temp }}/bws/GH_ORG_SHARED_APP_ID
-          GH_BRANCH_PREFIX_FILE: ${{ runner.temp }}/bws/GH_BRANCH_PREFIX
-          GH_BRANCH_STAGING_FILE: ${{ runner.temp }}/bws/GH_BRANCH_STAGING
-          GH_BRANCH_RELEASE_FILE: ${{ runner.temp }}/bws/GH_BRANCH_RELEASE
-          GL_GROUP_TOP_DERIVED_FILE: ${{ runner.temp }}/bws/GL_GROUP_TOP_DERIVED
-          GL_GROUP_SUB_TOOLS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_TOOLS
-          GL_GROUP_SUB_SECOPS_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_SECOPS
-          GL_GROUP_SUB_WIKI_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_WIKI
-          GL_GROUP_SUB_DIVERGE_FILE: ${{ runner.temp }}/bws/GL_GROUP_SUB_DIVERGE
-          GITHUB_APP_TOKEN_FILE: ${{ runner.temp }}/bws/GITHUB_APP_TOKEN
-          GL_TOKEN_DERIVED_FILE: ${{ runner.temp }}/bws/GL_TOKEN_DERIVED
         run: |
+          set -euo pipefail
+          set -a
+          . "${{ steps.bws.outputs.bws_env_file }}"
+          set +a
           python3 .github/scripts/gitlab_branch_protection.py
 
       - name: Post cleanup
@@ -208,30 +191,3 @@ jobs:
                 "${RUNNER_TEMP}/bws/GL_TOKEN_DERIVED" \
                 "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
           rm -rf "${RUNNER_TEMP}/bws"
-          for key in \
-            GH_ORG_SHARED_APP_ID_FILE \
-            GH_ORG_TOOLS_FILE \
-            GH_ORG_SECOPS_FILE \
-            GH_ORG_WIKI_FILE \
-            GH_ORG_DIVERGE_FILE \
-            GH_BRANCH_PREFIX_FILE \
-            GH_BRANCH_PRODUCT_FILE \
-            GH_BRANCH_STAGING_FILE \
-            GH_BRANCH_FEATURE_FILE \
-            GH_BRANCH_RELEASE_FILE \
-            GL_GROUP_TOP_DERIVED_FILE \
-            GL_GROUP_SUB_TOOLS_FILE \
-            GL_GROUP_SUB_SECOPS_FILE \
-            GL_GROUP_SUB_WIKI_FILE \
-            GL_GROUP_SUB_DIVERGE_FILE \
-            GH_ORG_SHARED_APP_PEM_FILE \
-            GL_TOKEN_DERIVED_FILE \
-            GITHUB_APP_TOKEN_FILE
-          do
-            printf '%s<<EOF\nEOF\n' "$key" >> "$GITHUB_ENV"
-          done
-          {
-            printf '%s\n' "GH_APP_PRIVATE_KEY="
-            printf '%s\n' "GH_APP_ID="
-            printf '%s\n' "GH_APP_ORG="
-          } >> "$GITHUB_ENV"
