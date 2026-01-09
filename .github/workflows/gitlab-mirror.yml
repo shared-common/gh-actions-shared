@@ -1,15 +1,16 @@
 name: GitLab Mirror
 
 on:
-  schedule:
-    - cron: "47 3 * * *"
-    - cron: "47 23 * * *"
   workflow_dispatch:
     inputs:
       repo:
         description: "Optional single fork repo name to target"
         required: false
         type: string
+  workflow_run:
+    workflows: ["Org Fork Orchestrator"]
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -20,6 +21,7 @@ concurrency:
 
 jobs:
   matrix:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -86,6 +88,7 @@ jobs:
   mirror:
     needs: matrix
     name: Mirror (${{ matrix.github_org }})
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
