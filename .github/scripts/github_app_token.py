@@ -115,17 +115,22 @@ def _request(method: str, url: str, token: str, payload: dict | None = None) -> 
         raise RuntimeError(f"GitHub API error ({exc.code}): {redact_text(body)}") from exc
 
 
-def _org_access(jwt_token: str, org: str) -> None:
-    data = _request("GET", f"https://api.github.com/orgs/{org}", jwt_token)
-    if not isinstance(data, dict) or data.get("login") != org:
-        raise RuntimeError("GitHub org access check failed")
+def _app_access(jwt_token: str) -> None:
+    data = _request("GET", "https://api.github.com/app", jwt_token)
+    if not isinstance(data, dict) or not data.get("id"):
+        raise RuntimeError("GitHub App access check failed")
 
 
 def _installation_id(jwt_token: str, org: str) -> int:
-    data = _request("GET", f"https://api.github.com/orgs/{org}/installation", jwt_token)
-    if not isinstance(data, dict) or not data.get("id"):
-        raise RuntimeError("Failed to resolve GitHub App installation id")
-    return int(data["id"])
+    data = _request("GET", "https://api.github.com/app/installations", jwt_token)
+    if not isinstance(data, list):
+        raise RuntimeError("Failed to list GitHub App installations")
+    for item in data:
+        account = item.get("account") if isinstance(item, dict) else None
+        if isinstance(account, dict) and account.get("login") == org and item.get("id"):
+            return int(item["id"])
+    raise RuntimeError("Failed to resolve GitHub App installation id")
+
 
 
 def _access_token(jwt_token: str, installation_id: int, repo: str | None) -> str:
@@ -202,7 +207,7 @@ def main() -> int:
     if not os.path.exists(pem_path):
         raise SystemExit(f"PEM file not found: {pem_path}")
     jwt_token = _jwt(app_id, pem_path)
-    _org_access(jwt_token, args.org)
+    _app_access(jwt_token)
     installation_id = _installation_id(jwt_token, args.org)
     token = _access_token(jwt_token, installation_id, args.repo.strip() or None)
 
