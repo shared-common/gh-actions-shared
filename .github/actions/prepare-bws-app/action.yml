@@ -68,8 +68,12 @@ runs:
       run: |
         set -euo pipefail
         secrets_dir="${RUNNER_TEMP}/bws"
+        skip_keys="$(printf '%s\n' "${{ inputs.org_keys }}" | sed '/^$/d')"
         while IFS= read -r key; do
           [ -z "$key" ] && continue
+          if printf '%s\n' "$skip_keys" | grep -qx "$key"; then
+            continue
+          fi
           printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "$GITHUB_ENV"
         done <<'EOF'
         ${{ inputs.secrets }}
@@ -108,12 +112,6 @@ runs:
         matrix_org="${{ inputs.github_org }}"
         secrets_dir="${RUNNER_TEMP}/bws"
         selected=""
-        while IFS= read -r key; do
-          [ -z "$key" ] && continue
-          printf '%s<<EOF\nEOF\n' "${key}_FILE" >> "$GITHUB_ENV"
-        done <<'EOF'
-        ${{ inputs.org_keys }}
-        EOF
         while IFS= read -r key; do
           [ -z "$key" ] && continue
           org_value="$(cat "${secrets_dir}/${key}")"

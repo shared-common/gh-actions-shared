@@ -74,11 +74,6 @@ def _resolve_org() -> str:
 
 
 def load_config() -> Config:
-    for key in _ORG_KEYS:
-        try:
-            ensure_file_env(key)
-        except ValueError:
-            continue
     org = _resolve_org()
     for name in _REQUIRED_ENV:
         ensure_file_env(name)

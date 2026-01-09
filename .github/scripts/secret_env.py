@@ -28,9 +28,11 @@ def read_required_value(name: str, *, allow_env: bool = True, max_bytes: int = M
 
 def ensure_file_env(name: str) -> str:
     file_key = f"{name}_FILE"
-    file_path = os.environ.get(file_key)
-    if file_path:
-        return file_path
+    if file_key in os.environ:
+        file_path = os.environ.get(file_key)
+        if file_path:
+            return file_path
+        raise ValueError(f"{file_key} is set but empty")
     runner_temp = os.environ.get("RUNNER_TEMP")
     if runner_temp:
         candidate = os.path.join(runner_temp, "bws", name)

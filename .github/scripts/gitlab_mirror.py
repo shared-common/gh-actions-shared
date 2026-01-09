@@ -83,12 +83,6 @@ def _resolve_org_and_group() -> tuple[str, str, str]:
         "GH_ORG_WIKI": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_WIKI"),
         "GH_ORG_DIVERGE": ("GL_GROUP_TOP_DERIVED", "GL_GROUP_SUB_DIVERGE"),
     }
-    for org_key, (group_key, subgroup_key) in org_map.items():
-        for key in (org_key, group_key, subgroup_key):
-            try:
-                ensure_file_env(key)
-            except ValueError:
-                continue
     org_values = {key: read_optional_value(key, allow_env=False) or "" for key in org_map}
     active_orgs = {key: value for key, value in org_values.items() if value}
     if not active_orgs:
