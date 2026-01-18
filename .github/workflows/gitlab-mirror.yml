@@ -195,25 +195,16 @@ jobs:
           set -euo pipefail
           secrets_dir="${RUNNER_TEMP}/bws"
           exports_file="${secrets_dir}/exports-protect.env"
-          : > "${exports_file}"
-          for key in \
-            GH_BRANCH_PREFIX \
-            GH_BRANCH_STAGING \
-            GH_BRANCH_RELEASE \
-            GH_ORG_TOOLS \
-            GH_ORG_SECOPS \
-            GH_ORG_WIKI \
-            GH_ORG_DIVERGE \
-            GL_GROUP_TOP_DERIVED \
-            GL_GROUP_SUB_TOOLS \
-            GL_GROUP_SUB_SECOPS \
-            GL_GROUP_SUB_WIKI \
-            GL_GROUP_SUB_DIVERGE \
-            GITHUB_APP_TOKEN \
-            GL_TOKEN_DERIVED
-          do
-            printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
-          done
+          source_env="${{ steps.bws.outputs.bws_env_file }}"
+          if [ -z "${source_env}" ]; then
+            printf '%s\n' "Missing bws_env_file output" >&2
+            exit 1
+          fi
+          if [ ! -f "${source_env}" ]; then
+            printf '%s\n' "Missing env file: ${source_env}" >&2
+            exit 1
+          fi
+          cp "${source_env}" "${exports_file}"
           chmod 600 "${exports_file}"
 
       - name: Apply protections
