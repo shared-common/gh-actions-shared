@@ -35,6 +35,8 @@ class Config:
 
     @property
     def feature_ref(self) -> str:
+        if "/" in self.feature_branch:
+            return f"{self.branch_prefix}/{self.feature_branch}"
         return f"{self.branch_prefix}/{self.feature_branch}/initial"
 
     @property
