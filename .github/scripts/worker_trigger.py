@@ -92,7 +92,8 @@ class WorkerWebhookError(RuntimeError):
 def _delivery_id(repo: str, ref: str) -> str:
     run_id = os.environ.get("GITHUB_RUN_ID", "local")
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    raw = f"{run_id}:{attempt}:{repo}:{ref}"
+    salt = str(int(time.time()))
+    raw = f"{run_id}:{attempt}:{repo}:{ref}:{salt}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     return f"gha-{digest}"
 
