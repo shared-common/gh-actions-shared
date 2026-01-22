@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -65,6 +66,33 @@ SENSITIVE_NAME_MARKERS = (
 
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
+
+
+def _read_secret(path: str, label: str) -> str:
+    if not os.path.exists(path):
+        raise SystemExit(f"{label} file not found: {path}")
+    if os.path.getsize(path) > MAX_SECRET_BYTES:
+        raise SystemExit(f"{label} file too large")
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _normalize_pem_file(path: str) -> str:
+    pem = _read_secret(path, "PEM").strip()
+    if not pem:
+        raise SystemExit("PEM file is empty")
+    if pem[0] == pem[-1] and pem[0] in {"'", '"'}:
+        pem = pem[1:-1].strip()
+    pem = pem.replace("\\n", "\n").replace("\r\n", "\n").strip()
+    if "-----BEGIN RSA PRIVATE KEY-----" not in pem and "-----BEGIN PRIVATE KEY-----" not in pem:
+        raise SystemExit("PEM file missing BEGIN PRIVATE KEY header")
+    if "-----END RSA PRIVATE KEY-----" not in pem and "-----END PRIVATE KEY-----" not in pem:
+        raise SystemExit("PEM file missing END PRIVATE KEY footer")
+    fd, tmp_path = tempfile.mkstemp(prefix="gh-app-", suffix=".pem")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(pem.rstrip() + "\n")
+    os.chmod(tmp_path, 0o600)
+    return tmp_path
 
 
 def _sign_rs256(pem_path: str, message: bytes) -> str:
@@ -200,19 +228,19 @@ def main() -> int:
     if not args.org.strip():
         raise SystemExit("GitHub org is required and must be non-empty")
 
-    if not os.path.exists(args.app_id_file):
-        raise SystemExit(f"App ID file not found: {args.app_id_file}")
-    if os.path.getsize(args.app_id_file) > MAX_SECRET_BYTES:
-        raise SystemExit("App ID file too large")
-    with open(args.app_id_file, "r", encoding="utf-8") as handle:
-        app_id = handle.read().strip()
-    pem_path = args.pem_file
-    if not os.path.exists(pem_path):
-        raise SystemExit(f"PEM file not found: {pem_path}")
-    jwt_token = _jwt(app_id, pem_path)
-    _app_access(jwt_token)
-    installation_id = _installation_id(jwt_token, args.org)
-    token = _access_token(jwt_token, installation_id, args.repo.strip() or None)
+    app_id = _read_secret(args.app_id_file, "App ID").strip()
+    pem_path = _normalize_pem_file(args.pem_file)
+    try:
+        jwt_token = _jwt(app_id, pem_path)
+        _app_access(jwt_token)
+        installation_id = _installation_id(jwt_token, args.org)
+        token = _access_token(jwt_token, installation_id, args.repo.strip() or None)
+    finally:
+        if pem_path != args.pem_file:
+            try:
+                os.remove(pem_path)
+            except OSError:
+                pass
 
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
     with open(args.output_file, "w", encoding="utf-8") as handle:
