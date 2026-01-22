@@ -7,6 +7,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -90,12 +91,7 @@ class WorkerWebhookError(RuntimeError):
 
 
 def _delivery_id(repo: str, ref: str) -> str:
-    run_id = os.environ.get("GITHUB_RUN_ID", "local")
-    attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    salt = str(int(time.time()))
-    raw = f"{run_id}:{attempt}:{repo}:{ref}:{salt}"
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    return f"gha-{digest}"
+    return f"gha-{uuid.uuid4()}"
 
 
 def _sign(secret: str, body: bytes) -> str:
