@@ -125,6 +125,7 @@ jobs:
             GH_BRANCH_PREFIX
             GH_BRANCH_PRODUCT
             GH_BRANCH_STAGING
+            GH_BRANCH_SNAPSHOT
             GH_BRANCH_FEATURE
             GH_BRANCH_RELEASE
             GH_ORG_SHARED_APP_PEM
@@ -173,6 +174,7 @@ jobs:
             GH_BRANCH_PREFIX \
             GH_BRANCH_PRODUCT \
             GH_BRANCH_STAGING \
+            GH_BRANCH_SNAPSHOT \
             GH_BRANCH_FEATURE \
             GH_BRANCH_RELEASE \
             CF_FORKS_WEBHOOK_URL \
