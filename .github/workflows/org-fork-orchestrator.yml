@@ -57,8 +57,8 @@ jobs:
         id: build-matrix
         shell: bash
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
           BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE
         run: |
           set -euo pipefail
@@ -111,8 +111,8 @@ jobs:
         id: bws
         uses: ./.github/actions/prepare-bws-app
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID

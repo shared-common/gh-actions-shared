@@ -8,10 +8,11 @@ from secret_env import read_optional_value
 
 _SECRET_KEYS = (
     "GITHUB_APP_TOKEN",
-    "GL_TOKEN_DERIVED",
     "GH_ORG_SHARED_APP_PEM",
     "GH_ORG_SHARED_APP_ID",
+    "CF_FORKS_WEBHOOK_SECRET",
     "BWS_ACCESS_TOKEN",
+    "BWS_PROJECT_ID",
 )
 
 

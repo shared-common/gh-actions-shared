@@ -105,10 +105,12 @@ def _validate_branch_config(cfg: Config) -> None:
             cfg.staging_branch,
             cfg.snapshot_branch,
             cfg.feature_branch,
+            cfg.release_branch,
             cfg.product_ref,
             cfg.staging_ref,
             cfg.snapshot_ref,
             cfg.feature_ref,
+            cfg.release_ref,
         ),
         label="branch",
     )
@@ -173,6 +175,7 @@ def process_repo(
     staging = cfg.staging_ref
     snapshot = cfg.snapshot_ref
     feature = cfg.feature_ref
+    release = cfg.release_ref
 
     # Step 1: mirror sync
     mirror_sync = sync_mirror(api, owner, name, mirror)
@@ -225,6 +228,7 @@ def process_repo(
         staging_sha = _ref_sha(api, owner, name, staging)
         branch_results["snapshot"] = ensure_branch(api, owner, name, snapshot, staging_sha)
         branch_results["feature"] = ensure_branch(api, owner, name, feature, product_sha_before)
+        branch_results["release"] = ensure_branch(api, owner, name, release, product_sha_before)
         result["branch_bootstrap"] = json.dumps(branch_results)
     except GitHubApiError as exc:
         issue = create_or_update_issue(
@@ -252,6 +256,7 @@ def process_repo(
         ("staging", staging),
         ("snapshot", snapshot),
         ("feature", feature),
+        ("release", release),
     ):
         try:
             _ref_sha(api, owner, name, ref)
@@ -358,6 +363,7 @@ def main() -> int:
         "staging_branch": cfg.staging_branch,
         "snapshot_branch": cfg.snapshot_branch,
         "feature_branch": cfg.feature_branch,
+        "release_branch": cfg.release_branch,
     }
     summary = format_summary(
         config_summary,

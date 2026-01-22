@@ -124,17 +124,25 @@ runs:
         secrets_dir="${RUNNER_TEMP}/bws"
         selected=""
         exports_file="${secrets_dir}/exports.env"
+        keys=()
         while IFS= read -r key; do
           [ -z "$key" ] && continue
+          keys+=("$key")
+        done <<'EOF'
+        ${{ inputs.org_keys }}
+        EOF
+        if [ "${#keys[@]}" -eq 0 ]; then
+          printf '%s\n' "No org keys provided; skipping org mapping check."
+          exit 0
+        fi
+        for key in "${keys[@]}"; do
           org_value="$(cat "${secrets_dir}/${key}")"
           if [ "$matrix_org" = "$org_value" ]; then
             printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
             selected="$key"
             break
           fi
-        done <<'EOF'
-        ${{ inputs.org_keys }}
-        EOF
+        done
         if [ -z "$selected" ]; then
           printf '%s\n' "Unknown org mapping for ${matrix_org}" >&2
           exit 1

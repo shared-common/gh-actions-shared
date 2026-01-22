@@ -9,7 +9,7 @@ tailored threat model and mitigations for this codebase.
 ### Assets
 - GitHub App private key and App ID
 - GitHub App installation tokens
-- GitLab API token
+- Cloudflare worker webhook secret
 - Org identifiers and branch configuration
 - Workflow integrity (what automation does to repos)
 
@@ -21,7 +21,7 @@ tailored threat model and mitigations for this codebase.
 ### Attack Surfaces
 - Workflow inputs and env variables
 - Secret materialization (files + logs)
-- API calls via GitHub/GitLab tokens
+- API calls via GitHub tokens
 - External tools (`bws`, `git`, `curl`)
 
 ### Key Risks
@@ -44,7 +44,7 @@ tailored threat model and mitigations for this codebase.
 ### B) Least Privilege
 - [ ] GitHub App permissions limited to **contents**, **metadata**, **issues**.
 - [ ] Workflow/job permissions use minimal scopes.
-- [ ] GitLab token has `api` scope only.
+- [ ] Worker webhook secret stored only in BWS and not logged.
 
 ### C) Input Validation
 - [ ] `INPUT_REPO` is validated before use.

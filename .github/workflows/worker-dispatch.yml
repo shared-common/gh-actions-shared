@@ -1,4 +1,4 @@
-name: GitLab Mirror
+name: Worker Dispatch
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: gitlab-mirror-${{ github.workflow }}-${{ github.ref }}-${{ inputs.repo || 'all' }}
+  group: worker-dispatch-${{ github.workflow }}-${{ github.ref }}-${{ inputs.repo || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -59,10 +59,9 @@ jobs:
         id: build-matrix
         shell: bash
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
-          BWS_NO_MASK_KEYS: >-
-            GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE,GL_GROUP_TOP_DERIVED,GL_GROUP_SUB_TOOLS,GL_GROUP_SUB_SECOPS,GL_GROUP_SUB_WIKI,GL_GROUP_SUB_DIVERGE
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
+          BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE
         run: |
           set -euo pipefail
           umask 077
@@ -73,23 +72,16 @@ jobs:
               GH_ORG_TOOLS \
               GH_ORG_SECOPS \
               GH_ORG_WIKI \
-              GH_ORG_DIVERGE \
-              GL_GROUP_TOP_DERIVED \
-              GL_GROUP_SUB_TOOLS \
-              GL_GROUP_SUB_SECOPS \
-              GL_GROUP_SUB_WIKI \
-              GL_GROUP_SUB_DIVERGE
-          for key in GH_ORG_TOOLS GH_ORG_SECOPS GH_ORG_WIKI GH_ORG_DIVERGE \
-            GL_GROUP_TOP_DERIVED GL_GROUP_SUB_TOOLS GL_GROUP_SUB_SECOPS GL_GROUP_SUB_WIKI GL_GROUP_SUB_DIVERGE
-          do
+              GH_ORG_DIVERGE
+          for key in GH_ORG_TOOLS GH_ORG_SECOPS GH_ORG_WIKI GH_ORG_DIVERGE; do
             file_path="${RUNNER_TEMP}/bws/${key}"
             export "${key}_FILE=${file_path}"
           done
-          /bin/sh .github/scripts/build_gitlab_matrix.sh | sed -e 's/^/matrix=/' >> "$GITHUB_OUTPUT"
+          /bin/sh .github/scripts/build_org_matrix.sh
 
-  mirror:
+  dispatch:
     needs: matrix
-    name: Mirror (${{ matrix.github_org }})
+    name: Dispatch (${{ matrix.github_org }})
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
@@ -98,10 +90,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    outputs:
-      gitlab_created: ${{ steps.gitlab-mirror.outputs.gitlab_created }}
     concurrency:
-      group: gitlab-mirror-${{ github.workflow }}-${{ matrix.github_org }}
+      group: worker-dispatch-${{ github.workflow }}-${{ matrix.github_org }}
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
@@ -123,51 +113,66 @@ jobs:
         id: bws
         uses: ./.github/actions/prepare-bws-app
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
-            GH_ORG_TOOLS
-            GH_ORG_SECOPS
-            GH_ORG_WIKI
-            GH_ORG_DIVERGE
             GH_BRANCH_PREFIX
             GH_BRANCH_PRODUCT
             GH_BRANCH_STAGING
             GH_BRANCH_FEATURE
             GH_BRANCH_RELEASE
-            GL_GROUP_TOP_DERIVED
-            GL_GROUP_SUB_TOOLS
-            GL_GROUP_SUB_SECOPS
-            GL_GROUP_SUB_WIKI
-            GL_GROUP_SUB_DIVERGE
             GH_ORG_SHARED_APP_PEM
-            GL_TOKEN_DERIVED
-          scoped_keys: |
-            GH_BRANCH_PREFIX
-            GH_BRANCH_PRODUCT
-            GH_BRANCH_STAGING
-            GH_BRANCH_FEATURE
-            GH_BRANCH_RELEASE
-            GL_GROUP_TOP_DERIVED
-            GL_GROUP_SUB_TOOLS
-            GL_GROUP_SUB_SECOPS
-            GL_GROUP_SUB_WIKI
-            GL_GROUP_SUB_DIVERGE
-            GL_TOKEN_DERIVED
-            GITHUB_APP_TOKEN
           org_keys: |
-            GH_ORG_TOOLS
-            GH_ORG_SECOPS
-            GH_ORG_WIKI
-            GH_ORG_DIVERGE
           github_org: ${{ matrix.github_org }}
           repo: ${{ inputs.repo }}
           app_id_key: GH_ORG_SHARED_APP_ID
           app_pem_key: GH_ORG_SHARED_APP_PEM
-          chmod_keys: |
-            GL_TOKEN_DERIVED
+          scoped_keys: |
+            GITHUB_APP_TOKEN
+
+      - name: Load worker dispatch secrets (web project)
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GLAB_FORKS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_WEB_PROJ_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          secrets_dir="${RUNNER_TEMP}/bws"
+          mkdir -p "${secrets_dir}"
+          bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
+            env PATH="${PATH}" \
+            /bin/sh .github/scripts/bws_export_secret_files.sh "${secrets_dir}" \
+              CF_FORKS_WEBHOOK_URL \
+              CF_FORKS_WEBHOOK_SECRET
+
+      - name: Assemble worker env file
+        shell: bash
+        run: |
+          set -euo pipefail
+          secrets_dir="${RUNNER_TEMP}/bws"
+          exports_file="${{ steps.bws.outputs.bws_env_file }}"
+          if [ -z "${exports_file}" ]; then
+            printf '%s\n' "Missing worker env file path" >&2
+            exit 1
+          fi
+          printf '%s' "${{ matrix.github_org }}" > "${secrets_dir}/GH_ORG_SHARED"
+          chmod 600 "${secrets_dir}/GH_ORG_SHARED"
+          for key in \
+            GH_ORG_SHARED \
+            GH_BRANCH_PREFIX \
+            GH_BRANCH_PRODUCT \
+            GH_BRANCH_STAGING \
+            GH_BRANCH_FEATURE \
+            GH_BRANCH_RELEASE \
+            CF_FORKS_WEBHOOK_URL \
+            CF_FORKS_WEBHOOK_SECRET; do
+            if [ -f "${secrets_dir}/${key}" ]; then
+              printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
+            fi
+          done
 
       - name: Validate INPUT_REPO
         shell: bash
@@ -177,8 +182,8 @@ jobs:
           set -euo pipefail
           /bin/sh .github/scripts/validate_input_repo.sh
 
-      - name: Run GitLab mirror
-        id: gitlab-mirror
+      - name: Trigger forks worker
+        shell: bash
         env:
           INPUT_REPO: ${{ inputs.repo }}
         run: |
@@ -186,43 +191,12 @@ jobs:
           set -a
           . "${{ steps.bws.outputs.bws_env_file }}"
           set +a
-          python3 .github/scripts/gitlab_mirror.py
-
-      - name: Scope secrets for protections
-        if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          secrets_dir="${RUNNER_TEMP}/bws"
-          exports_file="${secrets_dir}/exports-protect.env"
-          source_env="${{ steps.bws.outputs.bws_env_file }}"
-          if [ -z "${source_env}" ]; then
-            printf '%s\n' "Missing bws_env_file output" >&2
-            exit 1
-          fi
-          if [ ! -f "${source_env}" ]; then
-            printf '%s\n' "Missing env file: ${source_env}" >&2
-            exit 1
-          fi
-          cp "${source_env}" "${exports_file}"
-          chmod 600 "${exports_file}"
-
-      - name: Apply protections
-        if: steps.gitlab-mirror.outputs.gitlab_created == 'true'
-        env:
-          INPUT_REPO: ${{ inputs.repo }}
-        run: |
-          set -euo pipefail
-          set -a
-          . "${RUNNER_TEMP}/bws/exports-protect.env"
-          set +a
-          python3 .github/scripts/gitlab_branch_protection.py
+          python3 .github/scripts/worker_trigger.py
 
       - name: Post cleanup
         if: always()
         shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
         run: |
           rm -f "${RUNNER_TEMP}/bws/GH_ORG_SHARED_APP_PEM.pem" \
-                "${RUNNER_TEMP}/bws/GL_TOKEN_DERIVED" \
                 "${RUNNER_TEMP}/bws/GITHUB_APP_TOKEN"
           rm -rf "${RUNNER_TEMP}/bws"

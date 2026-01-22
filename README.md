@@ -13,7 +13,7 @@ This repository runs workflows that:
 - fast-forward staging when safe
 - keep snapshot and release as create-once branches
 - create or update canonical issues on conflicts/divergence
-- mirror selected refs to GitLab under a `github/` namespace
+- dispatch signed webhooks to the forks worker for GitLab automation
 
 No PRs are created. No force pushes are performed. If a repo diverges or conflicts, the run records an issue and skips remaining steps for that repo.
 
@@ -32,16 +32,20 @@ No pull request permissions are required.
 
 ## Required secrets (GitHub)
 
-Repo secret in `gh-actions`:
+Repo secrets in `gh-actions`:
 
-- `BWS_ACCESS_TOKEN` (Bitwarden Secrets Manager access token)
+- `BWS_GH_FORKS_TOKEN` (Bitwarden Secrets Manager access token for org-fork-orchestrator)
+- `BWS_GLAB_FORKS_TOKEN` (Bitwarden Secrets Manager access token for worker-dispatch)
 
-Repo variable:
-- `BWS_PROJECT_ID` (Bitwarden Secrets Manager project UUID)
+Repo variables:
+- `BWS_FORKS_ORCHESTRATOR_PROJ_ID` (Bitwarden Secrets Manager project UUID for org-fork-orchestrator)
+- `BWS_FORKS_WEB_PROJ_ID` (Bitwarden Secrets Manager project UUID for worker-dispatch)
 
 Bitwarden Secrets Manager keys (secret name → ENV):
 
 All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed via `*_FILE` env vars (e.g., `GH_ORG_SHARED_APP_PEM_FILE`).
+
+**Orchestrator project** (`BWS_FORKS_ORCHESTRATOR_PROJ_ID`):
 
 - `GH_ORG_SHARED_APP_ID`
 - `GH_ORG_SHARED_APP_PEM`
@@ -51,19 +55,15 @@ All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed
 - `GH_BRANCH_SNAPSHOT`
 - `GH_BRANCH_FEATURE`
 - `GH_BRANCH_RELEASE`
-
-Bitwarden Secrets Manager keys for org/group routing:
-
-- `GH_ORG_TBOX`
+- `GH_ORG_TOOLS`
 - `GH_ORG_SECOPS`
 - `GH_ORG_WIKI`
 - `GH_ORG_DIVERGE`
-- `GL_GROUP_ZFORKS`
-- `GL_GROUP_TBOX`
-- `GL_GROUP_SECOPS`
-- `GL_GROUP_WIKI`
-- `GL_GROUP_ZDIVERGE`
-- `GL_GROUP_GENERAL`
+
+**Web project** (`BWS_FORKS_WEB_PROJ_ID`):
+
+- `CF_FORKS_WEBHOOK_URL`
+- `CF_FORKS_WEBHOOK_SECRET`
 
 ## Branch model (GitHub)
 
@@ -78,7 +78,7 @@ Bitwarden Secrets Manager keys for org/group routing:
 - `org-fork-orchestrator` runs on a schedule:
   - `17 3 * * *`
   - `17 23 * * *`
-- `gitlab-mirror` runs only when `org-fork-orchestrator` completes successfully, or via manual dispatch.
+- `worker-dispatch` runs only when `org-fork-orchestrator` completes successfully, or via manual dispatch.
 
 ## Manual runs
 
@@ -86,28 +86,20 @@ You can run the workflows manually and optionally target a single repo:
 
 - `repo`: fork repository name (string)
 
-## GitLab mirror workflow
+## Worker dispatch workflow (via forks worker)
 
-The `gitlab-mirror` workflow mirrors selected GitHub refs into GitLab under a `github/` namespace and creates developer branches in GitLab only once (using `GH_BRANCH_*` variables for all branch names):
+The `worker-dispatch` workflow **triggers the forks Cloudflare worker** instead of calling GitLab directly.
+The worker then triggers the appropriate GitLab pipelines based on the webhook payload.
 
-- Mirror targets (updated every run, fast-forward only):
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_PRODUCT}` → `github/{GH_BRANCH_PREFIX}/{GH_BRANCH_PRODUCT}`
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_STAGING}` → `github/{GH_BRANCH_PREFIX}/{GH_BRANCH_STAGING}`
-- Dev branches (create-once in GitLab):
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_PRODUCT}` (default branch in GitLab)
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_STAGING}` (protected)
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_FEATURE}` (create-once)
-  - `{GH_BRANCH_PREFIX}/{GH_BRANCH_RELEASE}` (protected)
+- It emits signed **GitHub webhook payloads** (push-style) to the worker endpoint.
+- The worker validates the HMAC signature and applies its allowlist rules.
+- The org matrix, GitHub App credentials (`GH_ORG_SHARED_APP_ID/PEM`), and branch config are read from
+  the **orchestrator** BWS project. The web project only provides the worker webhook URL/secret.
 
-GitLab protection rules (managed by the `gitlab-mirror` workflow when a project is created):
-- Protect only `{GH_BRANCH_PREFIX}/{GH_BRANCH_STAGING}` and `{GH_BRANCH_PREFIX}/{GH_BRANCH_RELEASE}`
-- Do not protect any `github/*` branches
+Required Bitwarden Secrets Manager keys to reach the worker:
 
-Required Bitwarden Secrets Manager keys for GitLab mirroring (secret name → ENV):
-
-- `GL_TOKEN_DERIVED`
-
-The GitLab token must include `api` scope so the workflow can create missing projects.
+- `CF_FORKS_WEBHOOK_URL`
+- `CF_FORKS_WEBHOOK_SECRET`
 
 ## Token minting
 
@@ -119,9 +111,9 @@ GitHub App installation tokens are minted locally via a JWT flow in
 ## Files
 
 - `.github/workflows/org-fork-orchestrator.yml`
-- `.github/workflows/gitlab-mirror.yml`
+- `.github/workflows/worker-dispatch.yml`
 - `.github/scripts/orchestrator.py`
-- `.github/scripts/gitlab_mirror.py`
+- `.github/scripts/worker_trigger.py`
 - `.github/scripts/config.py`
 - `.github/scripts/github_api.py`
 - `.github/scripts/discover_repos.py`

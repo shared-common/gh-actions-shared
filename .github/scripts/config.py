@@ -15,6 +15,7 @@ class Config:
     staging_branch: str
     snapshot_branch: str
     feature_branch: str
+    release_branch: str
 
     @property
     def mirror_branch(self) -> str:
@@ -34,7 +35,11 @@ class Config:
 
     @property
     def feature_ref(self) -> str:
-        return f"{self.branch_prefix}/{self.feature_branch}"
+        return f"{self.branch_prefix}/{self.feature_branch}/initial"
+
+    @property
+    def release_ref(self) -> str:
+        return f"{self.branch_prefix}/{self.release_branch}"
 
 
 _REQUIRED_ENV = {
@@ -44,6 +49,7 @@ _REQUIRED_ENV = {
     "GH_BRANCH_STAGING",
     "GH_BRANCH_SNAPSHOT",
     "GH_BRANCH_FEATURE",
+    "GH_BRANCH_RELEASE",
 }
 
 _ORG_KEYS = (
@@ -89,4 +95,5 @@ def load_config() -> Config:
         staging_branch=read_required_value("GH_BRANCH_STAGING", allow_env=False),
         snapshot_branch=read_required_value("GH_BRANCH_SNAPSHOT", allow_env=False),
         feature_branch=read_required_value("GH_BRANCH_FEATURE", allow_env=False),
+        release_branch=read_required_value("GH_BRANCH_RELEASE", allow_env=False),
     )
