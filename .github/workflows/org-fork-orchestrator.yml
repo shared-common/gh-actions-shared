@@ -125,6 +125,7 @@ jobs:
             GH_BRANCH_STAGING
             GH_BRANCH_SNAPSHOT
             GH_BRANCH_FEATURE
+            GH_BRANCH_RELEASE
             GH_ORG_SHARED_APP_PEM
           scoped_keys: |
             GH_BRANCH_PREFIX
@@ -132,6 +133,7 @@ jobs:
             GH_BRANCH_STAGING
             GH_BRANCH_SNAPSHOT
             GH_BRANCH_FEATURE
+            GH_BRANCH_RELEASE
             GITHUB_APP_TOKEN
           org_keys: |
             GH_ORG_TOOLS
