@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import time
 
 from github_api import GitHubApi, GitHubApiError
 
@@ -37,4 +38,14 @@ def ensure_branch(api: GitHubApi, owner: str, repo: str, ref: str, base_sha: str
             existing_sha = _get_ref_sha(api, owner, repo, ref)
             if existing_sha:
                 return {"status": "exists", "sha": existing_sha, "note": "created concurrently"}
+            time.sleep(2)
+            try:
+                _create_ref(api, owner, repo, ref, base_sha)
+                return {"status": "created", "sha": base_sha, "note": "retry after 422"}
+            except GitHubApiError as retry_exc:
+                if retry_exc.status == 422:
+                    existing_sha = _get_ref_sha(api, owner, repo, ref)
+                    if existing_sha:
+                        return {"status": "exists", "sha": existing_sha, "note": "created concurrently"}
+                raise
         raise
