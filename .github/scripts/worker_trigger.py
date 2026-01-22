@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
@@ -101,6 +102,8 @@ def _sign(secret: str, body: bytes) -> str:
 
 def _request_with_retry(req: urllib.request.Request) -> Dict[str, Any]:
     max_attempts = 4
+    last_status = 0
+    last_error: Optional[str] = None
     for attempt in range(1, max_attempts + 1):
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
@@ -111,14 +114,43 @@ def _request_with_retry(req: urllib.request.Request) -> Dict[str, Any]:
             status = exc.code
             body = exc.read().decode("utf-8") if exc.fp else ""
             if status in (429, 500, 502, 503, 504):
+                last_status = status
+                last_error = body or "Worker webhook error"
                 time.sleep(min(2**attempt, 10))
                 continue
             raise WorkerWebhookError(status, body or "Worker webhook error") from exc
         except urllib.error.URLError as exc:
+            last_status = 0
+            last_error = f"Network error: {exc}"
             if attempt == max_attempts:
-                raise WorkerWebhookError(0, f"Network error: {exc}") from exc
+                break
             time.sleep(min(2**attempt, 10))
+    if last_error:
+        raise WorkerWebhookError(last_status, last_error)
     raise WorkerWebhookError(0, "Worker webhook retry limit exceeded")
+
+
+def _healthcheck_url(webhook_url: str) -> str:
+    parsed = urllib.parse.urlparse(webhook_url)
+    if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+        raise ValueError("Invalid worker webhook URL")
+    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, "/healthz", "", "", ""))
+
+
+def _check_health(cfg: WorkerConfig) -> None:
+    health_url = _healthcheck_url(cfg.webhook_url)
+    req = urllib.request.Request(
+        url=health_url,
+        method="GET",
+        headers={"User-Agent": "gh-actions-worker-health"},
+    )
+    try:
+        resp = _request_with_retry(req)
+    except WorkerWebhookError as exc:
+        raise WorkerWebhookError(exc.status, f"Worker health check failed: {exc}") from exc
+    if resp["status"] >= 400:
+        raise WorkerWebhookError(resp["status"], f"Worker health check failed: {resp.get('body', '')}")
+    log_event("worker_health", status=resp["status"], url=redact_text(health_url))
 
 
 def _send_webhook(cfg: WorkerConfig, repo: str, ref: str) -> Dict[str, Any]:
@@ -168,6 +200,7 @@ def _is_fork(api: GitHubApi, org: str, repo: str) -> bool:
 def main() -> int:
     cfg = load_config()
     _validate_branches(cfg)
+    _check_health(cfg)
     api = GitHubApi(cfg.github_token)
     repos = discover_fork_repos(api, cfg.github_org, cfg.repo_filter)
     secrets_to_redact = [cfg.webhook_secret]

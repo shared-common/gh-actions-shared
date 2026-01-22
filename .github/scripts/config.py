@@ -21,27 +21,29 @@ class Config:
     def mirror_branch(self) -> str:
         return "main"
 
+    def _prefixed(self, name: str) -> str:
+        prefix = self.branch_prefix.rstrip("/")
+        return name if name.startswith(f"{prefix}/") else f"{prefix}/{name}"
+
     @property
     def product_ref(self) -> str:
-        return f"{self.branch_prefix}/{self.product_branch}"
+        return self._prefixed(self.product_branch)
 
     @property
     def staging_ref(self) -> str:
-        return f"{self.branch_prefix}/{self.staging_branch}"
+        return self._prefixed(self.staging_branch)
 
     @property
     def snapshot_ref(self) -> str:
-        return f"{self.branch_prefix}/{self.snapshot_branch}"
+        return self._prefixed(self.snapshot_branch)
 
     @property
     def feature_ref(self) -> str:
-        if "/" in self.feature_branch:
-            return f"{self.branch_prefix}/{self.feature_branch}"
-        return f"{self.branch_prefix}/{self.feature_branch}/initial"
+        return self._prefixed(self.feature_branch)
 
     @property
     def release_ref(self) -> str:
-        return f"{self.branch_prefix}/{self.release_branch}"
+        return self._prefixed(self.release_branch)
 
 
 _REQUIRED_ENV = {
