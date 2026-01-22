@@ -118,6 +118,10 @@ jobs:
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
+            GH_ORG_TOOLS
+            GH_ORG_SECOPS
+            GH_ORG_WIKI
+            GH_ORG_DIVERGE
             GH_BRANCH_PREFIX
             GH_BRANCH_PRODUCT
             GH_BRANCH_STAGING
@@ -125,6 +129,10 @@ jobs:
             GH_BRANCH_RELEASE
             GH_ORG_SHARED_APP_PEM
           org_keys: |
+            GH_ORG_TOOLS
+            GH_ORG_SECOPS
+            GH_ORG_WIKI
+            GH_ORG_DIVERGE
           github_org: ${{ matrix.github_org }}
           repo: ${{ inputs.repo }}
           app_id_key: GH_ORG_SHARED_APP_ID
