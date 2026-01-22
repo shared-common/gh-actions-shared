@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: worker-dispatch-${{ github.workflow }}-${{ github.ref }}-${{ inputs.repo || 'all' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   matrix:
@@ -92,7 +92,7 @@ jobs:
       contents: read
     concurrency:
       group: worker-dispatch-${{ github.workflow }}-${{ matrix.github_org }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     timeout-minutes: 30
     steps:
       - name: Checkout
