@@ -333,6 +333,18 @@ def process_repo(
         compare_summary = {"status": "skipped"}
 
     result["staging_compare"] = json.dumps(compare_summary)
+
+    # Step 4b: keep release tracking product (mcr/main)
+    compare_rl = compare_refs(api, owner, name, release, product)
+    status_rl = _compare_status(compare_rl)
+    if status_rl == "identical":
+        result["release_promo"] = "already at product"
+    elif status_rl == "behind":
+        ff_update(api, owner, name, release, _head_sha(compare_rl, product_sha_after))
+        result["release_promo"] = "fast-forwarded to product"
+    else:
+        _force_update(api, owner, name, release, product_sha_after)
+        result["release_promo"] = f"reset to product ({status_rl})"
     # Step 5: snapshot is create-once; never update after bootstrap
     result["snapshot_promo"] = "unchanged (create-once policy)"
 
