@@ -38,11 +38,15 @@ class WorkerConfig:
 
     @property
     def branches(self) -> List[str]:
+        def prefixed(name: str) -> str:
+            prefix = self.branch_prefix.rstrip("/")
+            return name if name.startswith(f"{prefix}/") else f"{prefix}/{name}"
+
         return [
-            f"{self.branch_prefix}/{self.product_branch}",
-            f"{self.branch_prefix}/{self.staging_branch}",
-            f"{self.branch_prefix}/{self.feature_branch}/initial",
-            f"{self.branch_prefix}/{self.release_branch}",
+            prefixed(self.product_branch),
+            prefixed(self.staging_branch),
+            prefixed(self.feature_branch),
+            prefixed(self.release_branch),
         ]
 
 
