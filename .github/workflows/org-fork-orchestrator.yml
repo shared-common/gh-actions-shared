@@ -57,12 +57,20 @@ jobs:
         id: build-matrix
         shell: bash
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN || secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID || secrets.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
           BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE
         run: |
           set -euo pipefail
           umask 077
+          if [ -z "${BWS_ACCESS_TOKEN:-}" ]; then
+            printf '%s\n' "Missing BWS access token. Set secrets.BWS_GH_FORKS_TOKEN." >&2
+            exit 1
+          fi
+          if [ -z "${BWS_PROJECT_ID:-}" ]; then
+            printf '%s\n' "Missing BWS project ID. Set vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID (or secrets.BWS_FORKS_ORCHESTRATOR_PROJ_ID)." >&2
+            exit 1
+          fi
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
             env PATH="${PATH}" \
             env BWS_NO_MASK_KEYS="${BWS_NO_MASK_KEYS:-}" \
@@ -111,8 +119,8 @@ jobs:
         id: bws
         uses: ./.github/actions/prepare-bws-app
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN || secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_FORKS_ORCHESTRATOR_PROJ_ID || secrets.BWS_FORKS_ORCHESTRATOR_PROJ_ID }}
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
