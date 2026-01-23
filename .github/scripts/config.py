@@ -61,6 +61,7 @@ _ORG_KEYS = (
     "GH_ORG_SECOPS",
     "GH_ORG_WIKI",
     "GH_ORG_DIVERGE",
+    "GH_ORG_CHECKOUT",
 )
 
 

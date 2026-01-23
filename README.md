@@ -59,6 +59,7 @@ All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed
 - `GH_ORG_SECOPS`
 - `GH_ORG_WIKI`
 - `GH_ORG_DIVERGE`
+- `GH_ORG_CHECKOUT`
 
 **Web project** (`BWS_GLAB_FORKS_PROJ_ID`):
 
