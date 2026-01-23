@@ -77,6 +77,18 @@ def _read_secret(path: str, label: str) -> str:
         return handle.read()
 
 
+def _normalize_app_id(value: str) -> str:
+    app_id = value.strip()
+    if not app_id:
+        raise SystemExit("App ID is empty")
+    if app_id[0] == app_id[-1] and app_id[0] in {"'", '"'}:
+        app_id = app_id[1:-1].strip()
+    app_id = app_id.lstrip("\ufeff").strip()
+    if not app_id.isdigit():
+        raise SystemExit("App ID must be numeric")
+    return app_id
+
+
 def _normalize_pem_file(path: str) -> str:
     pem = _read_secret(path, "PEM").strip()
     if not pem:
@@ -228,7 +240,7 @@ def main() -> int:
     if not args.org.strip():
         raise SystemExit("GitHub org is required and must be non-empty")
 
-    app_id = _read_secret(args.app_id_file, "App ID").strip()
+    app_id = _normalize_app_id(_read_secret(args.app_id_file, "App ID"))
     pem_path = _normalize_pem_file(args.pem_file)
     try:
         jwt_token = _jwt(app_id, pem_path)
