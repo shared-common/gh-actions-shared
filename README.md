@@ -38,14 +38,14 @@ Repo secrets in `gh-actions`:
 - `BWS_GLAB_FORKS_TOKEN` (Bitwarden Secrets Manager access token for worker-dispatch)
 
 Repo variables:
-- `BWS_FORKS_ORCHESTRATOR_PROJ_ID` (Bitwarden Secrets Manager project UUID for org-fork-orchestrator)
-- `BWS_FORKS_WEB_PROJ_ID` (Bitwarden Secrets Manager project UUID for worker-dispatch)
+- `BWS_GH_FORKS_PROJ_ID` (Bitwarden Secrets Manager project UUID for org-fork-orchestrator)
+- `BWS_GLAB_FORKS_PROJ_ID` (Bitwarden Secrets Manager project UUID for worker-dispatch)
 
 Bitwarden Secrets Manager keys (secret name → ENV):
 
 All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed via `*_FILE` env vars (e.g., `GH_ORG_SHARED_APP_PEM_FILE`).
 
-**Orchestrator project** (`BWS_FORKS_ORCHESTRATOR_PROJ_ID`):
+**Orchestrator project** (`BWS_GH_FORKS_PROJ_ID`):
 
 - `GH_ORG_SHARED_APP_ID`
 - `GH_ORG_SHARED_APP_PEM`
@@ -60,7 +60,7 @@ All secrets are materialized to temp files under `${RUNNER_TEMP}/bws` and passed
 - `GH_ORG_WIKI`
 - `GH_ORG_DIVERGE`
 
-**Web project** (`BWS_FORKS_WEB_PROJ_ID`):
+**Web project** (`BWS_GLAB_FORKS_PROJ_ID`):
 
 - `CF_FORKS_WEBHOOK_URL`
 - `CF_FORKS_WEBHOOK_SECRET`
