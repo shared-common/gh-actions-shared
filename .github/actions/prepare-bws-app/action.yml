@@ -110,6 +110,7 @@ runs:
         EOF
 
     - name: Select org file path
+      id: select-org
       shell: bash
       run: |
         set -euo pipefail
@@ -138,6 +139,7 @@ runs:
           printf '%s\n' "Unknown org mapping for ${matrix_org}" >&2
           exit 1
         fi
+        printf '%s\n' "selected_org_key=${selected}" >> "$GITHUB_OUTPUT"
 
     - name: Mint GitHub App token (JWT)
       id: app-token
@@ -175,6 +177,14 @@ runs:
         secrets_dir="${RUNNER_TEMP}/bws"
         exports_file="${secrets_dir}/exports-orchestrator.env"
         : > "${exports_file}"
+        selected_org="${{ steps.select-org.outputs.selected_org_key }}"
+        org_keys=()
+        while IFS= read -r key; do
+          [ -z "$key" ] && continue
+          org_keys+=("$key")
+        done <<'EOF'
+        ${{ inputs.org_keys }}
+        EOF
         keys=()
         while IFS= read -r key; do
           [ -z "$key" ] && continue
@@ -183,6 +193,13 @@ runs:
         ${{ inputs.orchestrator_keys }}
         EOF
         for key in "${keys[@]}"; do
+          if [ -n "${selected_org}" ]; then
+            for org_key in "${org_keys[@]}"; do
+              if [ "${key}" = "${org_key}" ] && [ "${key}" != "${selected_org}" ]; then
+                continue 2
+              fi
+            done
+          fi
           if [ -f "${secrets_dir}/${key}" ]; then
             printf '%s\n' "${key}_FILE=${secrets_dir}/${key}" >> "${exports_file}"
           fi
