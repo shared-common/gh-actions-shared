@@ -165,7 +165,7 @@ def _send_webhook(cfg: WorkerConfig, repo: str, ref: str) -> Dict[str, Any]:
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "User-Agent": "gh-actions-worker",
+            "User-Agent": "gh-actions-forks",
             "X-GitHub-Event": "push",
             "X-GitHub-Delivery": _delivery_id(repo, ref),
             "X-Hub-Signature-256": _sign(cfg.webhook_secret, body),
