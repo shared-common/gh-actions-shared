@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -9,6 +10,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import sys
 
 from logging_util import redact_text
 
@@ -90,12 +92,14 @@ def _normalize_app_id(value: str) -> str:
 
 
 def _normalize_pem_file(path: str) -> str:
-    pem = _read_secret(path, "PEM").strip()
+    pem = _read_secret(path, "PEM").lstrip("\ufeff").strip()
     if not pem:
         raise SystemExit("PEM file is empty")
     if pem[0] == pem[-1] and pem[0] in {"'", '"'}:
         pem = pem[1:-1].strip()
-    pem = pem.replace("\\n", "\n").replace("\r\n", "\n").strip()
+    pem = pem.replace("\\\\r", "\r").replace("\\\\n", "\n")
+    pem = pem.replace("\\r", "\r").replace("\\n", "\n")
+    pem = pem.replace("\r\n", "\n").strip()
     if "-----BEGIN RSA PRIVATE KEY-----" not in pem and "-----BEGIN PRIVATE KEY-----" not in pem:
         raise SystemExit("PEM file missing BEGIN PRIVATE KEY header")
     if "-----END RSA PRIVATE KEY-----" not in pem and "-----END PRIVATE KEY-----" not in pem:
@@ -122,6 +126,39 @@ def _sign_rs256(pem_path: str, message: bytes) -> str:
         err = proc.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"openssl signing failed: {redact_text(err)}")
     return _b64url(proc.stdout)
+
+
+def _pubkey_fingerprint(pem_path: str) -> str:
+    proc = subprocess.run(
+        ["openssl", "pkey", "-in", pem_path, "-pubout", "-outform", "DER"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"openssl pubkey failed: {redact_text(err)}")
+    return hashlib.sha256(proc.stdout).hexdigest()
+
+
+def _collect_debug_info(app_id: str, pem_path: str, jwt_token: str | None = None) -> dict[str, str]:
+    info: dict[str, str] = {}
+    info["app_id_len"] = str(len(app_id))
+    info["app_id_tail"] = app_id[-4:] if len(app_id) >= 4 else app_id
+    try:
+        info["pem_bytes"] = str(os.path.getsize(pem_path))
+        with open(pem_path, "r", encoding="utf-8") as handle:
+            info["pem_lines"] = str(sum(1 for _ in handle))
+    except OSError as exc:
+        info["pem_error"] = f"{exc.__class__.__name__}:{exc}"
+    try:
+        info["pem_pub_sha256"] = _pubkey_fingerprint(pem_path)
+    except RuntimeError as exc:
+        info["pem_pub_sha256"] = f"error:{exc}"
+    if jwt_token is not None:
+        info["jwt_len"] = str(len(jwt_token))
+        info["jwt_segments"] = str(jwt_token.count(".") + 1)
+    return info
 
 
 def _jwt(app_id: str, pem_path: str) -> str:
@@ -243,10 +280,16 @@ def main() -> int:
     app_id = _normalize_app_id(_read_secret(args.app_id_file, "App ID"))
     pem_path = _normalize_pem_file(args.pem_file)
     try:
+        debug_info = _collect_debug_info(app_id, pem_path)
         jwt_token = _jwt(app_id, pem_path)
+        debug_info = _collect_debug_info(app_id, pem_path, jwt_token)
         _app_access(jwt_token)
         installation_id = _installation_id(jwt_token, args.org)
         token = _access_token(jwt_token, installation_id, args.repo.strip() or None)
+    except RuntimeError as exc:
+        if "debug_info" in locals():
+            print(f"debug: {json.dumps(debug_info, sort_keys=True)}", file=sys.stderr)
+        raise
     finally:
         if pem_path != args.pem_file:
             try:
