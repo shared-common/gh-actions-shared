@@ -122,6 +122,7 @@ jobs:
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN || secrets.BWS_ACCESS_TOKEN }}
           BWS_PROJECT_ID: ${{ vars.BWS_GH_FORKS_PROJ_ID || secrets.BWS_GH_FORKS_PROJ_ID }}
+          BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE,GH_ORG_CHECKOUT
         with:
           secrets: |
             GH_ORG_SHARED_APP_ID
@@ -137,14 +138,6 @@ jobs:
             GH_BRANCH_FEATURE
             GH_BRANCH_RELEASE
             GH_ORG_SHARED_APP_PEM
-          scoped_keys: |
-            GH_BRANCH_PREFIX
-            GH_BRANCH_PRODUCT
-            GH_BRANCH_STAGING
-            GH_BRANCH_SNAPSHOT
-            GH_BRANCH_FEATURE
-            GH_BRANCH_RELEASE
-            GITHUB_APP_TOKEN
           org_keys: |
             GH_ORG_TOOLS
             GH_ORG_SECOPS
@@ -155,6 +148,21 @@ jobs:
           repo: ${{ inputs.repo }}
           app_id_key: GH_ORG_SHARED_APP_ID
           app_pem_key: GH_ORG_SHARED_APP_PEM
+          orchestrator_keys: |
+            GH_ORG_TOOLS
+            GH_ORG_SECOPS
+            GH_ORG_WIKI
+            GH_ORG_DIVERGE
+            GH_ORG_CHECKOUT
+            GH_ORG_SHARED_APP_ID
+            GH_ORG_SHARED_APP_PEM
+            GH_BRANCH_PREFIX
+            GH_BRANCH_PRODUCT
+            GH_BRANCH_STAGING
+            GH_BRANCH_SNAPSHOT
+            GH_BRANCH_FEATURE
+            GH_BRANCH_RELEASE
+            GITHUB_APP_TOKEN
 
       - name: Validate INPUT_REPO
         shell: bash
@@ -170,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           set -a
-          . "${{ steps.bws.outputs.bws_env_file }}"
+          . "${{ steps.bws.outputs.bws_env_orchestrator }}"
           set +a
           python3 .github/scripts/orchestrator.py
 
