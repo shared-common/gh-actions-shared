@@ -216,6 +216,7 @@ jobs:
         shell: bash
         env:
           INPUT_REPO: ${{ inputs.repo }}
+          WORKER_TRIGGER_DELAY_SECONDS: "8"
         run: |
           set -euo pipefail
           set -a
