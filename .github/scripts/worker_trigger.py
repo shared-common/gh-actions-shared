@@ -168,9 +168,27 @@ def _check_health(cfg: WorkerConfig) -> None:
     log_event("worker_health", status=resp["status"], url=redact_text(health_url))
 
 
-def _send_webhook(cfg: WorkerConfig, repo: str, ref: str) -> Dict[str, Any]:
+def _resolve_branch_sha(api: GitHubApi, org: str, repo: str, ref: str) -> str:
+    path = f"/repos/{org}/{repo}/branches/{urllib.parse.quote(ref, safe='')}"
+    try:
+        resp = api.get(path)
+    except GitHubApiError as exc:
+        if exc.status == 404:
+            raise WorkerWebhookError(404, f"Branch not found: {org}/{repo}@{ref}") from exc
+        raise WorkerWebhookError(exc.status, f"GitHub API error: {exc}") from exc
+    data = resp.data if isinstance(resp.data, dict) else {}
+    commit = data.get("commit") if isinstance(data, dict) else None
+    sha = commit.get("sha") if isinstance(commit, dict) else None
+    if not isinstance(sha, str) or not sha:
+        raise WorkerWebhookError(resp.status, f"Missing branch sha for {org}/{repo}@{ref}")
+    return sha
+
+
+def _send_webhook(cfg: WorkerConfig, api: GitHubApi, repo: str, ref: str) -> Dict[str, Any]:
+    sha = _resolve_branch_sha(api, cfg.github_org, repo, ref)
     payload = {
         "ref": f"refs/heads/{ref}",
+        "after": sha,
         "repository": {"name": repo, "owner": {"login": cfg.github_org}},
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -248,7 +266,7 @@ def main() -> int:
         for ref in cfg.branches:
             total += 1
             try:
-                resp = _send_webhook(cfg, name, ref)
+                resp = _send_webhook(cfg, api, name, ref)
                 log_event(
                     "worker_webhook",
                     repo=name,
