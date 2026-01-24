@@ -37,6 +37,7 @@ class WorkerConfig:
     webhook_secret: str
     github_token: str
     repo_filter: Optional[str]
+    trigger_delay_seconds: float
 
     @property
     def branches(self) -> List[str]:
@@ -64,6 +65,9 @@ _REQUIRED_ENV = {
     "GITHUB_APP_TOKEN",
 }
 
+_DEFAULT_TRIGGER_DELAY_SECONDS = 4.0
+_MAX_TRIGGER_DELAY_SECONDS = 60.0
+
 
 def load_config() -> WorkerConfig:
     for name in _REQUIRED_ENV:
@@ -71,6 +75,8 @@ def load_config() -> WorkerConfig:
     missing = [name for name in _REQUIRED_ENV if not has_env_or_file(name)]
     if missing:
         raise ValueError(f"Missing required env vars: {', '.join(sorted(missing))}")
+    delay_value = read_optional_value("WORKER_TRIGGER_DELAY_SECONDS")
+    trigger_delay = _parse_delay_seconds(delay_value, _DEFAULT_TRIGGER_DELAY_SECONDS)
     return WorkerConfig(
         github_org=read_required_value("GH_ORG_SHARED", allow_env=False),
         branch_prefix=read_required_value("GH_BRANCH_PREFIX", allow_env=False),
@@ -82,6 +88,7 @@ def load_config() -> WorkerConfig:
         webhook_secret=read_required_secret_file("CF_FORKS_WEBHOOK_SECRET"),
         github_token=read_required_secret_file("GITHUB_APP_TOKEN"),
         repo_filter=read_optional_value("INPUT_REPO"),
+        trigger_delay_seconds=trigger_delay,
     )
 
 
@@ -100,6 +107,14 @@ def _sign(secret: str, body: bytes) -> str:
     return f"sha256={digest}"
 
 
+def _is_retryable(status: int, body: str) -> bool:
+    if status in (429, 500, 502, 503, 504):
+        return True
+    if status == 400 and "Too many pipelines created" in body:
+        return True
+    return False
+
+
 def _request_with_retry(req: urllib.request.Request) -> Dict[str, Any]:
     max_attempts = 4
     last_status = 0
@@ -113,7 +128,7 @@ def _request_with_retry(req: urllib.request.Request) -> Dict[str, Any]:
         except urllib.error.HTTPError as exc:
             status = exc.code
             body = exc.read().decode("utf-8") if exc.fp else ""
-            if status in (429, 500, 502, 503, 504):
+            if _is_retryable(status, body):
                 last_status = status
                 last_error = body or "Worker webhook error"
                 time.sleep(min(2**attempt, 10))
@@ -197,6 +212,23 @@ def _is_fork(api: GitHubApi, org: str, repo: str) -> bool:
     return bool(data.get("fork") and data.get("parent"))
 
 
+def _parse_delay_seconds(value: Optional[str], default: float) -> float:
+    if value is None:
+        return default
+    raw = value.strip()
+    if not raw:
+        return default
+    try:
+        delay = float(raw)
+    except ValueError as exc:
+        raise ValueError("WORKER_TRIGGER_DELAY_SECONDS must be a number") from exc
+    if delay < 0:
+        raise ValueError("WORKER_TRIGGER_DELAY_SECONDS must be >= 0")
+    if delay > _MAX_TRIGGER_DELAY_SECONDS:
+        raise ValueError(f"WORKER_TRIGGER_DELAY_SECONDS must be <= {_MAX_TRIGGER_DELAY_SECONDS}")
+    return delay
+
+
 def main() -> int:
     cfg = load_config()
     _validate_branches(cfg)
@@ -233,6 +265,8 @@ def main() -> int:
                     status=exc.status,
                     error=redact_text(str(exc)),
                 )
+            if cfg.trigger_delay_seconds > 0:
+                time.sleep(cfg.trigger_delay_seconds)
 
     if failures:
         raise SystemExit(f"Worker webhook failures: {', '.join(failures)}")
