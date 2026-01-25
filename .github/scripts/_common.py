@@ -34,12 +34,13 @@ def optional_env(name: str) -> Optional[str]:
 
 def require_secret(name: str) -> str:
     file_path = os.environ.get(f\"{name}_FILE\", \"\").strip()
-    if file_path:
-        with open(file_path, \"r\", encoding=\"utf-8\") as handle:
-            value = handle.read().strip()
-        if value:
-            return value
-    return require_env(name)
+    if not file_path:
+        raise SystemExit(f\"Missing required secret file env var: {name}_FILE\")
+    with open(file_path, \"r\", encoding=\"utf-8\") as handle:
+        value = handle.read().strip()
+    if not value:
+        raise SystemExit(f\"Empty secret file for {name}\")
+    return value
 
 
 def load_json(path: str) -> Any:
