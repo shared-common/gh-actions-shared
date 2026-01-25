@@ -1,0 +1,64 @@
+name: "bws-fetch"
+description: "Fetch secrets from Bitwarden Secrets Manager into files."
+inputs:
+  access-token:
+    required: true
+    description: "BWS access token"
+  project-id:
+    required: true
+    description: "BWS project id"
+  secrets:
+    required: true
+    description: "Comma-separated secret names"
+  bws-version:
+    required: true
+    description: "BWS CLI version"
+  bws-sha256:
+    required: true
+    description: "BWS CLI sha256"
+  output-dir:
+    required: false
+    default: "bws"
+    description: "Output directory for secret files"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install bws CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="${{ inputs.bws-version }}"
+        checksum="${{ inputs.bws-sha256 }}"
+        base_url="https://github.com/mattycramer/sdk-sm/releases/download/gl-bws-cli-v${version}"
+        archive="bws-x86_64-unknown-linux-gnu-${version}.tar.gz"
+        checksum_file="bws-sha256-checksums-${version}.txt"
+        tmp_dir="$(mktemp -d)"
+        curl -fL --retry 3 --retry-delay 1 -o "${tmp_dir}/${archive}" "${base_url}/${archive}"
+        curl -fL --retry 3 --retry-delay 1 -o "${tmp_dir}/${checksum_file}" "${base_url}/${checksum_file}"
+        expected="$(awk -v f="${archive}" '{name=$2; if (name ~ /^\*/) { name=substr(name,2) } if (substr(name,1,2)=="./") { name=substr(name,3) } sub(/\r$/, "", name); if (name==f) { print $1; exit }}' "${tmp_dir}/${checksum_file}")"
+        if [ -z "${expected}" ]; then
+          echo "Checksum for ${archive} not found" >&2
+          exit 1
+        fi
+        if [ "${expected}" != "${checksum}" ]; then
+          echo "Checksum mismatch for ${archive}" >&2
+          exit 1
+        fi
+        printf '%s  %s\n' "${expected}" "${archive}" > "${tmp_dir}/bws.sha256"
+        (cd "${tmp_dir}" && sha256sum -c bws.sha256)
+        tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}"
+        chmod 0755 "${tmp_dir}/bws"
+        echo "${tmp_dir}" >> "$GITHUB_PATH"
+    - name: Fetch secrets
+      shell: bash
+      env:
+        BWS_ACCESS_TOKEN: ${{ inputs.access-token }}
+        BWS_PROJECT_ID: ${{ inputs.project-id }}
+        SECRETS: ${{ inputs.secrets }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+        bws run --project-id "${BWS_PROJECT_ID}" --no-inherit-env -- \
+          env SECRETS="${SECRETS}" OUTPUT_DIR="${OUTPUT_DIR}" GITHUB_ENV="${GITHUB_ENV}" PATH="${PATH}" \
+          python3 "${{ github.action_path }}/write_secrets.py"

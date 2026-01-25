@@ -1,0 +1,47 @@
+name: validate-inputs
+
+on:
+  workflow_call:
+    inputs:
+      payload:
+        required: true
+        type: string
+      schema-path:
+        required: true
+        type: string
+      shared-repo:
+        required: true
+        type: string
+      shared-ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout shared workflows
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ inputs.shared-repo }}
+          ref: ${{ inputs.shared-ref }}
+          path: shared
+
+      - name: Write payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat <<'JSON' > payload.json
+          ${{ inputs.payload }}
+          JSON
+
+      - name: Validate payload
+        uses: ./shared/.github/actions/json-validate
+        with:
+          json-path: payload.json
+          schema-path: ${{ inputs.schema-path }}

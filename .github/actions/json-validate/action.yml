@@ -1,0 +1,19 @@
+name: "json-validate"
+description: "Validate JSON against a minimal schema"
+inputs:
+  json-path:
+    required: true
+  schema-path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate JSON
+      shell: bash
+      env:
+        JSON_PATH: ${{ inputs.json-path }}
+        SCHEMA_PATH: ${{ inputs.schema-path }}
+      run: |
+        set -euo pipefail
+        python3 "${{ github.action_path }}/validate.py"

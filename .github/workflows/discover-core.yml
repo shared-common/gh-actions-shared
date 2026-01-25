@@ -1,0 +1,79 @@
+name: discover-core
+
+on:
+  workflow_call:
+    inputs:
+      target-org:
+        required: true
+        type: string
+      shared-repo:
+        required: true
+        type: string
+      shared-ref:
+        required: true
+        type: string
+      bws-version:
+        required: true
+        type: string
+      bws-sha256:
+        required: true
+        type: string
+      bws-secrets:
+        required: false
+        type: string
+        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON"
+    secrets:
+      BWS_ACCESS_TOKEN:
+        required: true
+      BWS_PROJECT_ID:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout shared workflows
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ inputs.shared-repo }}
+          ref: ${{ inputs.shared-ref }}
+          path: shared
+
+      - name: Fetch secrets from BWS
+        uses: ./shared/.github/actions/bws-fetch
+        with:
+          access-token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          project-id: ${{ secrets.BWS_PROJECT_ID }}
+          bws-version: ${{ inputs.bws-version }}
+          bws-sha256: ${{ inputs.bws-sha256 }}
+          secrets: ${{ inputs.bws-secrets }}
+          output-dir: shared/.secrets
+
+      - name: Discover repos
+        shell: bash
+        env:
+          TARGET_ORG: ${{ inputs.target-org }}
+          OUTPUT_PATH: discover.json
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/discover_repos.py
+
+      - name: Render summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_PATH=discover.json OUTPUT_PATH=summary.md \
+            python3 shared/.github/scripts/summary_render.py
+
+      - name: Publish summary
+        uses: ./shared/.github/actions/job-summary
+        with:
+          summary-path: summary.md

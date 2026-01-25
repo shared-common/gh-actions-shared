@@ -1,0 +1,18 @@
+name: "job-summary"
+description: "Append markdown to GitHub job summary"
+inputs:
+  summary-path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Append summary
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -f "${{ inputs.summary-path }}" ]; then
+          echo "Summary file not found" >&2
+          exit 1
+        fi
+        cat "${{ inputs.summary-path }}" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,85 @@
+name: poller-core
+
+on:
+  workflow_call:
+    inputs:
+      target-org:
+        required: true
+        type: string
+      orchestrator-repo:
+        required: true
+        type: string
+      shared-repo:
+        required: true
+        type: string
+      shared-ref:
+        required: true
+        type: string
+      bws-version:
+        required: true
+        type: string
+      bws-sha256:
+        required: true
+        type: string
+      bws-secrets:
+        required: false
+        type: string
+        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN"
+    secrets:
+      BWS_ACCESS_TOKEN:
+        required: true
+      BWS_PROJECT_ID:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  poll:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout shared workflows
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ inputs.shared-repo }}
+          ref: ${{ inputs.shared-ref }}
+          path: shared
+
+      - name: Fetch secrets from BWS
+        uses: ./shared/.github/actions/bws-fetch
+        with:
+          access-token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          project-id: ${{ secrets.BWS_PROJECT_ID }}
+          bws-version: ${{ inputs.bws-version }}
+          bws-sha256: ${{ inputs.bws-sha256 }}
+          secrets: ${{ inputs.bws-secrets }}
+          output-dir: shared/.secrets
+
+      - name: Poll upstream
+        shell: bash
+        env:
+          TARGET_ORG: ${{ inputs.target-org }}
+          OUTPUT_PATH: polling.json
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+          GIT_BRANCH_PREFIX_FILE: ${{ env.GIT_BRANCH_PREFIX_FILE }}
+          GIT_BRANCH_MAIN_FILE: ${{ env.GIT_BRANCH_MAIN_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/poll_upstream.py
+
+      - name: Dispatch orchestrator
+        shell: bash
+        env:
+          TARGET_ORG: ${{ inputs.target-org }}
+          ORCHESTRATOR_REPO: ${{ inputs.orchestrator-repo }}
+          INPUT_PATH: polling.json
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/dispatch_orchestrator.py

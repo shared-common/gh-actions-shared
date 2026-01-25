@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "event_id": {"type": "string"},
+    "job_type": {"type": "string", "enum": ["create", "polling", "sync"]},
+    "repo_full_name": {"type": "string"},
+    "repo_default_branch": {"type": "string"},
+    "repo_is_fork": {"type": "boolean"},
+    "repo_parent_full_name": {"type": ["string", "null"]},
+    "repo_parent_default_branch": {"type": ["string", "null"]}
+  },
+  "required": ["repo_full_name", "job_type"],
+  "additionalProperties": true
+}

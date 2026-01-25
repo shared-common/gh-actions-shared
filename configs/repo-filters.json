@@ -1,0 +1,4 @@
+{
+  "exclude_prefixes": ["gh-actions-"],
+  "exclude_exact": ["gh-actions-shared"]
+}

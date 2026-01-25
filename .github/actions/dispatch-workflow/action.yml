@@ -1,0 +1,31 @@
+name: "dispatch-workflow"
+description: "Dispatch repository_dispatch events"
+inputs:
+  token:
+    required: true
+  owner:
+    required: true
+  repo:
+    required: true
+  event-type:
+    required: true
+  payload:
+    required: false
+  payload-path:
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Dispatch
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        OWNER: ${{ inputs.owner }}
+        REPO: ${{ inputs.repo }}
+        EVENT_TYPE: ${{ inputs.event-type }}
+        PAYLOAD: ${{ inputs.payload }}
+        PAYLOAD_PATH: ${{ inputs.payload-path }}
+      run: |
+        set -euo pipefail
+        python3 "${{ github.action_path }}/dispatch.py"

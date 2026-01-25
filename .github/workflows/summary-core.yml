@@ -1,0 +1,50 @@
+name: summary-core
+
+on:
+  workflow_call:
+    inputs:
+      summary-json:
+        required: true
+        type: string
+      shared-repo:
+        required: true
+        type: string
+      shared-ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  summary:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout shared workflows
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ inputs.shared-repo }}
+          ref: ${{ inputs.shared-ref }}
+          path: shared
+
+      - name: Write summary payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat <<'JSON' > summary.json
+          ${{ inputs.summary-json }}
+          JSON
+
+      - name: Render summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_PATH=summary.json OUTPUT_PATH=summary.md \
+            python3 shared/.github/scripts/summary_render.py
+
+      - name: Publish summary
+        uses: ./shared/.github/actions/job-summary
+        with:
+          summary-path: summary.md
