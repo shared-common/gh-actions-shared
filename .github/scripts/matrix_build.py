@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import Dict, Iterable, List
 
@@ -42,6 +43,14 @@ def build_org_matrix(org_keys: Iterable[str]) -> Dict[str, List[Dict[str, str]]]
         orgs.append(_read_env_value(key, f"org ({key})"))
     if len(set(orgs)) != len(orgs):
         raise SystemExit("Duplicate org entries")
+    org_filter = os.environ.get("INPUT_ORG")
+    if org_filter:
+        candidate = org_filter.strip()
+        if not NAME_RE.match(candidate):
+            raise SystemExit(f"Invalid org filter: {candidate}")
+        if candidate not in orgs:
+            raise SystemExit(f"Requested org not configured: {candidate}")
+        orgs = [candidate]
     return {"include": [{"github_org": org} for org in orgs]}
 
 

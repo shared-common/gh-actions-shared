@@ -1,11 +1,12 @@
 name: Org Fork Orchestrator
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
-    - cron: "17 23 * * *"
   workflow_dispatch:
     inputs:
+      org:
+        description: "Optional org name to target"
+        required: false
+        type: string
       repo:
         description: "Optional single fork repo name to target"
         required: false
@@ -15,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: org-fork-orchestrator-${{ github.workflow }}-${{ github.ref }}-${{ inputs.repo || 'all' }}
+  group: org-fork-orchestrator-${{ github.workflow }}-${{ github.ref }}-${{ inputs.org || 'all' }}-${{ inputs.repo || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -57,18 +58,18 @@ jobs:
         id: build-matrix
         shell: bash
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_GH_FORKS_PROJ_ID || secrets.BWS_GH_FORKS_PROJ_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_TOKEN_GL_FORKS }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJ_GL_FORKS || secrets.BWS_PROJ_GL_FORKS }}
           BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE,GH_ORG_CHECKOUT
         run: |
           set -euo pipefail
           umask 077
           if [ -z "${BWS_ACCESS_TOKEN:-}" ]; then
-            printf '%s\n' "Missing BWS access token. Set secrets.BWS_GH_FORKS_TOKEN." >&2
+            printf '%s\n' "Missing BWS access token. Set secrets.BWS_TOKEN_GL_FORKS." >&2
             exit 1
           fi
           if [ -z "${BWS_PROJECT_ID:-}" ]; then
-            printf '%s\n' "Missing BWS project ID. Set vars.BWS_GH_FORKS_PROJ_ID (or secrets.BWS_GH_FORKS_PROJ_ID)." >&2
+            printf '%s\n' "Missing BWS project ID. Set vars.BWS_PROJ_GL_FORKS (or secrets.BWS_PROJ_GL_FORKS)." >&2
             exit 1
           fi
           bws run --project-id "${BWS_PROJECT_ID:?}" --no-inherit-env -- \
@@ -120,8 +121,8 @@ jobs:
         id: bws
         uses: ./.github/actions/prepare-bws-app
         env:
-          BWS_ACCESS_TOKEN: ${{ secrets.BWS_GH_FORKS_TOKEN }}
-          BWS_PROJECT_ID: ${{ vars.BWS_GH_FORKS_PROJ_ID || secrets.BWS_GH_FORKS_PROJ_ID }}
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_TOKEN_GL_FORKS }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJ_GL_FORKS || secrets.BWS_PROJ_GL_FORKS }}
           BWS_NO_MASK_KEYS: GH_ORG_TOOLS,GH_ORG_SECOPS,GH_ORG_WIKI,GH_ORG_DIVERGE,GH_ORG_CHECKOUT
         with:
           secrets: |
