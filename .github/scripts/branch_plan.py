@@ -1,29 +1,15 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
-from _common import require_secret
+from branch_policy import load_branch_policy
 
 
 def main() -> int:
-    prefix = require_secret("GIT_BRANCH_PREFIX")
-    main = require_secret("GIT_BRANCH_MAIN")
-    staging = require_secret("GIT_BRANCH_STAGING")
-    release = require_secret("GIT_BRANCH_RELEASE")
-    snapshot = require_secret("GIT_BRANCH_SNAPSHOT")
-    feature = require_secret("GIT_BRANCH_FEATURE")
-
+    policy = load_branch_policy()
     plan = {
-        "prefix": prefix,
-        "order": [main, staging, release, snapshot, feature],
-        "branches": {
-            "main": f"{prefix}/{main}",
-            "staging": f"{prefix}/{staging}",
-            "release": f"{prefix}/{release}",
-            "snapshot": f"{prefix}/{snapshot}",
-            "feature": f"{prefix}/{feature}",
-        },
+        "prefix": policy.prefix,
+        "order": [spec.name for spec in policy.order],
+        "branches": {spec.name_env: spec.full_name for spec in policy.order},
     }
 
     output = Path("branch-plan.json")

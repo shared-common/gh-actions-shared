@@ -7,10 +7,12 @@ Shared GitHub Actions workflows, scripts, and composite actions used by org-spec
 - No org-specific data or secrets in this repo.
 - All `uses:` references must be pinned to a commit SHA.
 - Keep permissions minimal (`contents: read` by default).
+- All shared workflows must validate event context against `configs/event-allowlist.json`.
 
 ## Security
 - Do not print secrets.
 - BWS secrets must be handled via files (`*_FILE`), not exported env values.
+- Inputs must include `job_type` and pass schema validation.
 
 ## Workflow policy
 - Reusable workflows only (`workflow_call`).

@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -17,10 +16,18 @@ def main() -> int:
         raise SystemExit("Missing required inputs")
     payload = {}
     if payload_path:
-        with open(payload_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        try:
+            with open(payload_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except FileNotFoundError as exc:
+            raise SystemExit(f"Payload file not found: {payload_path}") from exc
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Payload file contains invalid JSON: {exc.msg}") from exc
     elif payload_inline:
-        payload = json.loads(payload_inline)
+        try:
+            payload = json.loads(payload_inline)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Payload inline JSON invalid: {exc.msg}") from exc
     body = json.dumps({"event_type": event_type, "client_payload": payload}).encode("utf-8")
     req = urllib.request.Request(
         url=f"https://api.github.com/repos/{owner}/{repo}/dispatches",
@@ -33,9 +40,15 @@ def main() -> int:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        if resp.status not in (200, 204):
-            raise SystemExit(f"Dispatch failed: {resp.status}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 204):
+                raise SystemExit(f"Dispatch failed: {resp.status}")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+        raise SystemExit(f"Dispatch failed: {exc.code} {body}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Dispatch failed: {exc}") from exc
     return 0
 
 

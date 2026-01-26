@@ -6,12 +6,39 @@ on:
       summary-json:
         required: true
         type: string
+      event-context:
+        required: true
+        type: string
+      event-name:
+        required: true
+        type: string
+      expected-event-action:
+        required: true
+        type: string
+      target-org:
+        required: true
+        type: string
       shared-repo:
         required: true
         type: string
       shared-ref:
         required: true
         type: string
+      bws-version:
+        required: true
+        type: string
+      bws-sha256:
+        required: true
+        type: string
+      bws-secrets:
+        required: false
+        type: string
+        default: "GH_INSTALL_JSON"
+    secrets:
+      BWS_ACCESS_TOKEN:
+        required: true
+      BWS_PROJECT_ID:
+        required: true
 
 permissions:
   contents: read
@@ -23,11 +50,45 @@ jobs:
       contents: read
     steps:
       - name: Checkout shared workflows
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ inputs.shared-repo }}
           ref: ${{ inputs.shared-ref }}
           path: shared
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14.2"
+
+      - name: Fetch secrets from BWS
+        uses: ./shared/.github/actions/bws-fetch
+        with:
+          access-token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          project-id: ${{ secrets.BWS_PROJECT_ID }}
+          bws-version: ${{ inputs.bws-version }}
+          bws-sha256: ${{ inputs.bws-sha256 }}
+          secrets: ${{ inputs.bws-secrets }}
+          output-dir: shared/.secrets
+
+      - name: Write event context
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat <<'JSON' > event.json
+          ${{ inputs.event-context }}
+          JSON
+
+      - name: Validate event
+        shell: bash
+        env:
+          EVENT_CONTEXT_PATH: event.json
+          EVENT_NAME: ${{ inputs.event-name }}
+          EXPECTED_EVENT_ACTION: ${{ inputs.expected-event-action }}
+          TARGET_ORG: ${{ inputs.target-org }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/validate_event.py
 
       - name: Write summary payload
         shell: bash

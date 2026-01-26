@@ -50,11 +50,14 @@ tailored threat model and mitigations for this codebase.
 - [ ] `INPUT_REPO` is validated before use.
 - [ ] Repo filters reject unsafe characters (no `/`, spaces, dot‑prefix).
 - [ ] Branch names validated before use.
+- [ ] Event allowlist enforced for repository_dispatch + schedule.
+- [ ] `job_type` required and validated against schema.
 
 ### D) Supply‑Chain Hygiene
 - [ ] `bws` download is pinned by version and sha256.
 - [ ] Actions use pinned versions (no `@main`).
 - [ ] No network downloads without checksums.
+- [ ] Python runtime pinned via `actions/setup-python` to latest stable.
 
 ### E) Operational Safety
 - [ ] Fail fast on missing required env vars.

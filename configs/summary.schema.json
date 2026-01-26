@@ -4,6 +4,7 @@
   "properties": {
     "repo": {"type": "string"},
     "job_type": {"type": "string"},
+    "event_id": {"type": "string"},
     "results": {
       "type": "object",
       "properties": {
@@ -12,7 +13,8 @@
         "skipped": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true
-    }
+    },
+    "errors": {"type": "array", "items": {"type": "string"}}
   },
   "additionalProperties": true
 }

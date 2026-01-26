@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path
@@ -13,77 +11,78 @@ from _common import (
     require_env,
     require_secret,
     update_branch,
+    validate_ref_name,
+    validate_repo_full_name,
 )
+from branch_policy import BranchPolicy, load_branch_policy
 
 
 def load_input() -> dict:
     path = os.environ.get("INPUT_PATH")
     if not path:
         raise SystemExit("Missing INPUT_PATH")
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Missing INPUT_PATH file: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"INPUT_PATH contains invalid JSON: {exc.msg}") from exc
 
 
-def branch_plan() -> dict:
-    prefix = require_secret("GIT_BRANCH_PREFIX")
-    main = require_secret("GIT_BRANCH_MAIN")
-    staging = require_secret("GIT_BRANCH_STAGING")
-    release = require_secret("GIT_BRANCH_RELEASE")
-    snapshot = require_secret("GIT_BRANCH_SNAPSHOT")
-    feature = require_secret("GIT_BRANCH_FEATURE")
-    order = [main, staging, release, snapshot, feature]
-    return {
-        "prefix": prefix,
-        "order": order,
-        "branches": {
-            "main": f"{prefix}/{main}",
-            "staging": f"{prefix}/{staging}",
-            "release": f"{prefix}/{release}",
-            "snapshot": f"{prefix}/{snapshot}",
-            "feature": f"{prefix}/{feature}",
-        },
-    }
+def _coerce_branch(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise SystemExit(f"Invalid {label}")
+    validate_ref_name(value, label)
+    return value
 
 
-def get_base_sha(input_data: dict, org: str, repo: str, app_id: str, pem_path: str, install_json: str) -> str:
-    default_branch = input_data.get("repo_default_branch") or "main"
+def get_base_sha(
+    input_data: dict, org: str, repo: str, app_id: str, pem_path: str, install_json: str
+) -> str:
+    default_branch = _coerce_branch(input_data.get("repo_default_branch") or "main", "repo_default_branch")
     base_token = get_installation_token_for_org(app_id, pem_path, install_json, org)
     if input_data.get("repo_parent_full_name"):
         parent_full = input_data.get("repo_parent_full_name")
         if isinstance(parent_full, str) and "/" in parent_full:
-            parent_org, parent_repo = parent_full.split("/", 1)
-            parent_branch = input_data.get("repo_parent_default_branch") or default_branch
+            parent_org, parent_repo = validate_repo_full_name(parent_full)
+            parent_branch = _coerce_branch(
+                input_data.get("repo_parent_default_branch") or default_branch, "repo_parent_default_branch"
+            )
             parent_token = (
                 base_token
                 if parent_org == org
                 else get_installation_token_for_org(app_id, pem_path, install_json, parent_org)
             )
-            return get_branch_sha(parent_token, parent_org, parent_repo, str(parent_branch))
+            return get_branch_sha(parent_token, parent_org, parent_repo, parent_branch)
     return get_branch_sha(base_token, org, repo, str(default_branch))
 
 
 def main() -> int:
     input_data = load_input()
     repo_full = input_data.get("repo_full_name")
-    if not isinstance(repo_full, str) or "/" not in repo_full:
-        raise SystemExit("Invalid repo_full_name")
-    org, repo = repo_full.split("/", 1)
+    org, repo = validate_repo_full_name(repo_full)
     job_type = input_data.get("job_type") or "create"
+    if job_type not in {"create", "polling", "sync"}:
+        raise SystemExit(f"Unsupported job_type: {job_type}")
 
     app_id = require_secret("GH_ORG_SHARED_APP_ID")
     pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
     install_json = require_secret("GH_INSTALL_JSON")
 
-    plan = branch_plan()
-    prefix = plan["prefix"]
-    order: List[str] = plan["order"]
+    target_org = os.environ.get("TARGET_ORG")
+    if target_org and target_org != org:
+        raise SystemExit("repo_full_name org does not match target org")
+
+    policy_path = os.environ.get("BRANCH_POLICY_PATH")
+    policy: BranchPolicy = load_branch_policy(policy_path)
 
     token = get_installation_token_for_org(app_id, pem_path, install_json, org)
     base_sha = get_base_sha(input_data, org, repo, app_id, pem_path, install_json)
 
     results: Dict[str, List[str]] = {"created": [], "updated": [], "skipped": []}
 
-    for name in order:
-        full = f"{prefix}/{name}"
+    for spec in policy.order:
+        full = spec.full_name
         if branch_exists(token, org, repo, full):
             results["skipped"].append(full)
             continue
@@ -91,7 +90,10 @@ def main() -> int:
         results["created"].append(full)
 
     if job_type in {"polling", "sync"}:
-        for name in [plan["branches"]["main"], plan["branches"]["staging"]]:
+        for spec in policy.order:
+            if not spec.update:
+                continue
+            name = spec.full_name
             try:
                 current = get_branch_sha(token, org, repo, name)
             except SystemExit:
@@ -102,6 +104,9 @@ def main() -> int:
 
     output_path = os.environ.get("OUTPUT_PATH")
     payload = {"repo": repo_full, "job_type": job_type, "results": results}
+    event_id = input_data.get("event_id")
+    if isinstance(event_id, str) and event_id:
+        payload["event_id"] = event_id
     if output_path:
         Path(output_path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
     else:

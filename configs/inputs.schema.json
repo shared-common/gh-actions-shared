@@ -2,13 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "event_id": {"type": "string"},
+    "event_id": {"type": "string", "maxLength": 200},
     "job_type": {"type": "string", "enum": ["create", "polling", "sync"]},
-    "repo_full_name": {"type": "string"},
-    "repo_default_branch": {"type": "string"},
+    "repo_full_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "maxLength": 300
+    },
+    "repo_default_branch": {"type": "string", "minLength": 1, "maxLength": 200},
     "repo_is_fork": {"type": "boolean"},
-    "repo_parent_full_name": {"type": ["string", "null"]},
-    "repo_parent_default_branch": {"type": ["string", "null"]}
+    "repo_parent_full_name": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "maxLength": 300
+    },
+    "repo_parent_default_branch": {"type": ["string", "null"], "minLength": 1, "maxLength": 200}
   },
   "required": ["repo_full_name", "job_type"],
   "additionalProperties": true

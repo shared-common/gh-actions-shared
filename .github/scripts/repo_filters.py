@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 from typing import Iterable, List
 
@@ -11,7 +9,14 @@ def apply_filters(repos: Iterable[dict], config_path: str) -> List[dict]:
     exclude_prefixes = config.get("exclude_prefixes", []) if isinstance(config, dict) else []
     exclude_exact = config.get("exclude_exact", []) if isinstance(config, dict) else []
     exclude_regex = config.get("exclude_regex", []) if isinstance(config, dict) else []
-    regexes = [re.compile(r) for r in exclude_regex if isinstance(r, str)]
+    regexes = []
+    for pattern in exclude_regex:
+        if not isinstance(pattern, str):
+            continue
+        try:
+            regexes.append(re.compile(pattern))
+        except re.error as exc:
+            raise SystemExit(f"Invalid exclude_regex pattern: {pattern}") from exc
 
     filtered: List[dict] = []
     for repo in repos:

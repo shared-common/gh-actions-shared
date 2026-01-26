@@ -4,7 +4,11 @@
   "items": {
     "type": "object",
     "properties": {
-      "repo_full_name": {"type": "string"}
+      "repo_full_name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "maxLength": 300
+      }
     },
     "required": ["repo_full_name"],
     "additionalProperties": true

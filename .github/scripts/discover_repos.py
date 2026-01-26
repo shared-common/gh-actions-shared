@@ -1,10 +1,15 @@
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path
 
-from _common import get_installation_token_for_org, list_org_repos, require_env, require_secret
+from _common import (
+    allowed_orgs,
+    config_path,
+    get_installation_token_for_org,
+    list_org_repos,
+    require_env,
+    require_secret,
+)
 from repo_filters import apply_filters
 
 
@@ -13,7 +18,10 @@ def main() -> int:
     app_id = require_secret("GH_ORG_SHARED_APP_ID")
     pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
     install_json = require_secret("GH_INSTALL_JSON")
-    filters_path = os.environ.get("REPO_FILTERS_PATH", "configs/repo-filters.json")
+    filters_path = os.environ.get("REPO_FILTERS_PATH", config_path("repo-filters.json"))
+
+    if org not in allowed_orgs(install_json):
+        raise SystemExit(f"Target org '{org}' is not in installation mapping")
 
     token = get_installation_token_for_org(app_id, pem_path, install_json, org)
     repos = list_org_repos(token, org)

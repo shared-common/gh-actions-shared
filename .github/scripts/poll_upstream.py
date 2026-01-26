@@ -1,17 +1,18 @@
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path
 from typing import List
 
 from _common import (
+    allowed_orgs,
+    config_path,
     get_branch_sha,
     get_installation_token_for_org,
     get_repo,
     list_org_repos,
     require_env,
     require_secret,
+    validate_ref_name,
 )
 from repo_filters import apply_filters
 
@@ -24,9 +25,15 @@ def main() -> int:
     prefix = require_secret("GIT_BRANCH_PREFIX")
     main_branch = require_secret("GIT_BRANCH_MAIN")
 
+    validate_ref_name(prefix, "GIT_BRANCH_PREFIX")
+    validate_ref_name(main_branch, "GIT_BRANCH_MAIN")
+
+    if org not in allowed_orgs(install_json):
+        raise SystemExit(f"Target org '{org}' is not in installation mapping")
+
     token = get_installation_token_for_org(app_id, pem_path, install_json, org)
     repos = list_org_repos(token, org)
-    repos = apply_filters(repos, os.environ.get("REPO_FILTERS_PATH", "configs/repo-filters.json"))
+    repos = apply_filters(repos, os.environ.get("REPO_FILTERS_PATH", config_path("repo-filters.json")))
 
     payloads: List[dict] = []
     for repo in repos:
@@ -45,6 +52,10 @@ def main() -> int:
         parent_full = parent.get("full_name")
         parent_branch = parent.get("default_branch")
         if not isinstance(parent_full, str) or not isinstance(parent_branch, str):
+            continue
+        try:
+            validate_ref_name(parent_branch, "parent default branch")
+        except SystemExit:
             continue
         parent_org, parent_repo = parent_full.split("/", 1)
         parent_token = (
