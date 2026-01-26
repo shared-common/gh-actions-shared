@@ -9,7 +9,8 @@
 ## Wrapper repo contract
 Wrapper repos must:
 - Be thin wrappers only (no orchestration logic).
-- Avoid `workflow_dispatch`; only `repository_dispatch` and scheduled poller are allowed.
+- Avoid `workflow_dispatch`; only `repository_dispatch` in orchestrator wrappers is allowed.
+- Scheduled poller runs in dedicated `*-polling` repos per org.
 - Pass `event-context`, `event-name`, and `expected-event-action` inputs.
 - Pass `target-org` for org validation.
 - Provide BWS secrets via repo secrets (per‑org).

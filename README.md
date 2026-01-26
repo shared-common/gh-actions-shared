@@ -21,6 +21,7 @@ repos**; this repository stays org‑agnostic.
 ## Wrapper repo contract
 Wrapper repositories must:
 - Call only the reusable workflows in this repo.
+- Run scheduled poller from dedicated public `*-polling` repos.
 - Pass `event-context`, `event-name`, and `expected-event-action`.
 - Pass `target-org` to enforce org allowlists.
 - Provide BWS secrets via repo secrets (no inline secrets).

@@ -8,6 +8,9 @@ The shared workflows only accept the following:
 The allowlist is defined in `configs/event-allowlist.json` and enforced by
 `scripts/validate_event.py`.
 
+> Polling runs from dedicated public `*-polling` repos. Orchestrator/discover/summary
+> events are delivered to the private wrapper repos.
+
 ## Payload schema
 The `repository_dispatch` payload is validated against `configs/inputs.schema.json`.
 Required fields:

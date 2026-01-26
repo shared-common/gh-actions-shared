@@ -17,9 +17,10 @@ lives here**.
 
 ## Data flow
 1. GitHub App webhook → Cloudflare Worker
-2. Worker sends `repository_dispatch` to wrapper repo
-3. Wrapper invokes shared workflow with event context + payload
-4. Shared workflow validates event, then performs the job
+2. Worker sends `repository_dispatch` to **private** orchestrator wrapper repo
+3. Scheduled poller runs from **public** `*-polling` repo and dispatches orchestrator
+4. Wrapper invokes shared workflow with event context + payload
+5. Shared workflow validates event, then performs the job
 
 ## Security boundaries
 - Secrets are fetched via BWS and written to `*_FILE` paths only.
