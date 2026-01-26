@@ -1,3 +1,4 @@
+---
 name: "job-summary"
 description: "Append markdown to GitHub job summary"
 inputs:

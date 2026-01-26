@@ -1,3 +1,4 @@
+---
 name: "dispatch-workflow"
 description: "Dispatch repository_dispatch events"
 inputs:

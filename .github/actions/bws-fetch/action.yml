@@ -1,3 +1,4 @@
+---
 name: "bws-fetch"
 description: "Fetch secrets from Bitwarden Secrets Manager into files."
 inputs:
@@ -36,9 +37,17 @@ runs:
         checksum_file="bws-sha256-checksums-${version}.txt"
         tmp_dir="$(mktemp -d)"
         trap 'rm -rf "${tmp_dir}"' EXIT
-        curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 -o "${tmp_dir}/${archive}" "${base_url}/${archive}"
-        curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 -o "${tmp_dir}/${checksum_file}" "${base_url}/${checksum_file}"
-        expected="$(awk -v f="${archive}" '{name=$2; if (name ~ /^\*/) { name=substr(name,2) } if (substr(name,1,2)=="./") { name=substr(name,3) } sub(/\r$/, "", name); if (name==f) { print $1; exit }}' "${tmp_dir}/${checksum_file}")"
+        curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 \
+          -o "${tmp_dir}/${archive}" "${base_url}/${archive}"
+        curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 \
+          -o "${tmp_dir}/${checksum_file}" "${base_url}/${checksum_file}"
+        expected="$(awk -v f="${archive}" '
+          name=$2
+          if (name ~ /^\*/) { name=substr(name,2) }
+          if (substr(name,1,2)=="./") { name=substr(name,3) }
+          sub(/\r$/, "", name)
+          if (name==f) { print $1; exit }
+        ' "${tmp_dir}/${checksum_file}")"
         if [ -z "${expected}" ]; then
           echo "Checksum for ${archive} not found" >&2
           exit 1
@@ -62,5 +71,6 @@ runs:
       run: |
         set -euo pipefail
         bws run --project-id "${BWS_PROJECT_ID}" --no-inherit-env -- \
-          env SECRETS="${SECRETS}" OUTPUT_DIR="${OUTPUT_DIR}" GITHUB_ENV="${GITHUB_ENV}" PATH="${PATH}" \
+          env SECRETS="${SECRETS}" OUTPUT_DIR="${OUTPUT_DIR}" \
+          GITHUB_ENV="${GITHUB_ENV}" PATH="${PATH}" \
           python3 "${{ github.action_path }}/write_secrets.py"

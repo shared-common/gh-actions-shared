@@ -1,3 +1,4 @@
+---
 name: "json-validate"
 description: "Validate JSON against a minimal schema"
 inputs:

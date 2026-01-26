@@ -1,6 +1,7 @@
+---
 name: poller-core
 
-on:
+"on":
   workflow_call:
     inputs:
       target-org:
@@ -33,7 +34,9 @@ on:
       bws-secrets:
         required: false
         type: string
-        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN"
+        default: >-
+          GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,
+          GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
@@ -50,14 +53,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout shared workflows
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        # actions/checkout v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           repository: ${{ inputs.shared-repo }}
           ref: ${{ inputs.shared-ref }}
           path: shared
 
       - name: Setup Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        # actions/setup-python v6.1.0
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: "3.14.2"
 
