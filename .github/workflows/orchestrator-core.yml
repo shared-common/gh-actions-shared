@@ -44,8 +44,7 @@ name: orchestrator-core
       BWS_PROJECT_ID:
         required: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   orchestrate:
