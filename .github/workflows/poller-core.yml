@@ -35,7 +35,7 @@ name: poller-core
         required: false
         type: string
         default: >-
-          GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,
+          GH_ORG_POLLING_APP_ID,GH_ORG_POLLING_APP_PEM,GH_INSTALL_JSON,
           GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN
     secrets:
       BWS_ACCESS_TOKEN:
@@ -100,8 +100,8 @@ jobs:
         env:
           TARGET_ORG: ${{ inputs.target-org }}
           OUTPUT_PATH: polling.json
-          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
-          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_ORG_POLLING_APP_PEM_FILE: ${{ env.GH_ORG_POLLING_APP_PEM_FILE }}
+          GH_ORG_POLLING_APP_ID_FILE: ${{ env.GH_ORG_POLLING_APP_ID_FILE }}
           GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
           GIT_BRANCH_PREFIX_FILE: ${{ env.GIT_BRANCH_PREFIX_FILE }}
           GIT_BRANCH_MAIN_FILE: ${{ env.GIT_BRANCH_MAIN_FILE }}
@@ -115,8 +115,8 @@ jobs:
           TARGET_ORG: ${{ inputs.target-org }}
           ORCHESTRATOR_REPO: ${{ inputs.orchestrator-repo }}
           INPUT_PATH: polling.json
-          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
-          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_ORG_POLLING_APP_PEM_FILE: ${{ env.GH_ORG_POLLING_APP_PEM_FILE }}
+          GH_ORG_POLLING_APP_ID_FILE: ${{ env.GH_ORG_POLLING_APP_ID_FILE }}
           GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
         run: |
           set -euo pipefail

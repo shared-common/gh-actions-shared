@@ -22,6 +22,8 @@ repos**; this repository stays org‑agnostic.
 Wrapper repositories must:
 - Call only the reusable workflows in this repo.
 - Run scheduled poller from dedicated public `*-polling` repos.
+- Polling repos must provide polling app secrets:
+  `GH_ORG_POLLING_APP_ID` and `GH_ORG_POLLING_APP_PEM` (via BWS).
 - Pass `event-context`, `event-name`, and `expected-event-action`.
 - Pass `target-org` to enforce org allowlists.
 - Provide BWS secrets via repo secrets (no inline secrets).

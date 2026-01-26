@@ -19,8 +19,8 @@ from repo_filters import apply_filters
 
 def main() -> int:
     org = require_env("TARGET_ORG")
-    app_id = require_secret("GH_ORG_SHARED_APP_ID")
-    pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
+    app_id = require_secret("GH_ORG_POLLING_APP_ID")
+    pem_path = require_env("GH_ORG_POLLING_APP_PEM_FILE")
     install_json = require_secret("GH_INSTALL_JSON")
     prefix = require_secret("GIT_BRANCH_PREFIX")
     main_branch = require_secret("GIT_BRANCH_MAIN")

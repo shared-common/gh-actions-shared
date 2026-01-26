@@ -11,6 +11,8 @@ Wrapper repos must:
 - Be thin wrappers only (no orchestration logic).
 - Avoid `workflow_dispatch`; only `repository_dispatch` in orchestrator wrappers is allowed.
 - Scheduled poller runs in dedicated `*-polling` repos per org.
+- Poller workflows must use polling app secrets:
+  `GH_ORG_POLLING_APP_ID` and `GH_ORG_POLLING_APP_PEM`.
 - Pass `event-context`, `event-name`, and `expected-event-action` inputs.
 - Pass `target-org` for org validation.
 - Provide BWS secrets via repo secrets (per‑org).

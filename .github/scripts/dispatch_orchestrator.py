@@ -29,8 +29,8 @@ def normalize_payload(payload: dict) -> dict:
 def main() -> int:
     org = require_env("TARGET_ORG")
     orchestrator_repo = require_env("ORCHESTRATOR_REPO")
-    app_id = require_secret("GH_ORG_SHARED_APP_ID")
-    pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
+    app_id = require_secret("GH_ORG_POLLING_APP_ID")
+    pem_path = require_env("GH_ORG_POLLING_APP_PEM_FILE")
     install_json = require_secret("GH_INSTALL_JSON")
     input_path = os.environ.get("INPUT_PATH")
 
