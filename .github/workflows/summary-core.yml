@@ -47,9 +47,48 @@ permissions:
 jobs:
   summary:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
+      - name: Validate shared inputs
+        shell: bash
+        env:
+          SHARED_REPO: ${{ inputs.shared-repo }}
+          SHARED_REF: ${{ inputs.shared-ref }}
+          EVENT_CONTEXT: ${{ inputs.event-context }}
+          SUMMARY_JSON: ${{ inputs.summary-json }}
+        run: |
+          set -euo pipefail
+          allowed_repo="shared-common/gh-actions-shared"
+          allowed_refs="196e9781c87e8d2db80c847e04488abadbd1af54"
+          if [ "$SHARED_REPO" != "$allowed_repo" ]; then
+            printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
+            exit 1
+          fi
+          allowed=false
+          for ref in $allowed_refs; do
+            if [ "$SHARED_REF" = "$ref" ]; then
+              allowed=true
+              break
+            fi
+          done
+          if [ "$allowed" != "true" ]; then
+            printf '%s\n' "shared-ref not allowlisted: $SHARED_REF" >&2
+            exit 1
+          fi
+          max_bytes=262144
+          size="$(printf '%s' "$EVENT_CONTEXT" | wc -c | tr -d '[:space:]')"
+          if [ "${size}" -gt "${max_bytes}" ]; then
+            printf '%s\n' "event-context too large: ${size} bytes" >&2
+            exit 1
+          fi
+          summary_size="$(printf '%s' "$SUMMARY_JSON" | wc -c | tr -d '[:space:]')"
+          if [ "${summary_size}" -gt "${max_bytes}" ]; then
+            printf '%s\n' "summary-json too large: ${summary_size} bytes" >&2
+            exit 1
+          fi
+
       - name: Checkout shared workflows
         # actions/checkout v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -112,3 +151,10 @@ jobs:
         uses: ./shared/.github/actions/job-summary
         with:
           summary-path: summary.md
+
+      - name: Cleanup secrets
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf shared/.secrets

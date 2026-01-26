@@ -12,9 +12,9 @@
         "updated": {"type": "array", "items": {"type": "string"}},
         "skipped": {"type": "array", "items": {"type": "string"}}
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "errors": {"type": "array", "items": {"type": "string"}}
   },
-  "additionalProperties": true
+  "additionalProperties": false
 }

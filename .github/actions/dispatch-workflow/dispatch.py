@@ -3,6 +3,12 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+sys.path.append(str(SCRIPTS_DIR))
+
+from log_sanitize import sanitize  # noqa: E402
 
 
 def main() -> int:
@@ -46,6 +52,7 @@ def main() -> int:
                 raise SystemExit(f"Dispatch failed: {resp.status}")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+        body = sanitize(body)
         raise SystemExit(f"Dispatch failed: {exc.code} {body}") from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"Dispatch failed: {exc}") from exc

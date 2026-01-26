@@ -19,5 +19,5 @@
     "repo_parent_default_branch": {"type": ["string", "null"], "minLength": 1, "maxLength": 200}
   },
   "required": ["repo_full_name", "job_type"],
-  "additionalProperties": true
+  "additionalProperties": false
 }

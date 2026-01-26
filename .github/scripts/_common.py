@@ -10,6 +10,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from log_sanitize import sanitize
+
 GITHUB_API = "https://api.github.com"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "configs"
@@ -125,6 +127,24 @@ def github_request(
                     raise ApiError(resp.status, "Invalid JSON response from GitHub API") from exc
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            body = sanitize(body)
+            if exc.code == 403 and attempt < retries - 1:
+                headers = exc.headers or {}
+                retry_after_raw = headers.get("Retry-After")
+                wait = None
+                if retry_after_raw and retry_after_raw.isdigit():
+                    wait = int(retry_after_raw)
+                else:
+                    remaining = headers.get("X-RateLimit-Remaining")
+                    reset_raw = headers.get("X-RateLimit-Reset")
+                    if remaining == "0" and reset_raw and reset_raw.isdigit():
+                        reset_at = int(reset_raw)
+                        wait = max(0, reset_at - int(time.time()))
+                if wait is not None:
+                    wait = max(1, min(60, wait))
+                    time.sleep(wait)
+                    attempt += 1
+                    continue
             if exc.code in {500, 502, 503, 504} and attempt < retries - 1:
                 time.sleep(1 + attempt)
                 attempt += 1

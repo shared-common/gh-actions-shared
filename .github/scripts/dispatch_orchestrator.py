@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 
 from _common import (
@@ -9,9 +10,72 @@ from _common import (
     require_secret,
     validate_repo_full_name,
 )
+from log_sanitize import sanitize
+
+_ALLOWLIST_ENV_NAMES = ("GH_ORG_SHARED_ALLOWED_JSON",)
+_REPO_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def audit_log(message: str) -> None:
+    print(sanitize(message))
+
+
+def _read_allowlist_json() -> str:
+    for name in _ALLOWLIST_ENV_NAMES:
+        file_path = os.environ.get(f"{name}_FILE", "").strip()
+        if not file_path:
+            continue
+        try:
+            return Path(file_path).read_text(encoding="utf-8").strip()
+        except FileNotFoundError as exc:
+            raise SystemExit(f"Missing allowlist file for {name}: {file_path}") from exc
+        except OSError as exc:
+            raise SystemExit(f"Unable to read allowlist file for {name}: {file_path}") from exc
+    raise SystemExit("Missing allowlist secret file env var: GH_ORG_SHARED_ALLOWED_JSON_FILE")
+
+
+def load_orchestrator_allowlist() -> set[str]:
+    raw = _read_allowlist_json()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Allowlist JSON invalid: {exc.msg}") from exc
+    entries: list[str] = []
+    if isinstance(data, list):
+        entries = data
+    elif isinstance(data, dict):
+        for value in data.values():
+            if isinstance(value, list):
+                entries.extend(value)
+            else:
+                entries.append(value)
+    else:
+        raise SystemExit("Allowlist JSON must be a list or object")
+    allowed: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, str):
+            continue
+        value = entry.strip()
+        if not value:
+            continue
+        if "/" in value:
+            validate_repo_full_name(value)
+            allowed.add(value)
+        else:
+            if not _REPO_PART.match(value):
+                raise SystemExit(f"Invalid repo name in allowlist: {value}")
+            allowed.add(value)
+    if not allowed:
+        raise SystemExit("Allowlist JSON did not contain any repo names")
+    return allowed
 
 
 def dispatch(token: str, org: str, repo: str, payload: dict) -> None:
+    repo_full = payload.get("repo_full_name") if isinstance(payload, dict) else None
+    job_type = payload.get("job_type") if isinstance(payload, dict) else None
+    audit_log(
+        f"[audit] dispatch orchestrator={org}/{repo} repo_full_name={repo_full or 'unknown'} job_type={job_type or 'unknown'}"
+    )
     github_request(token, "POST", f"/repos/{org}/{repo}/dispatches", {"event_type": "orchestrator", "client_payload": payload})
 
 
@@ -29,6 +93,9 @@ def normalize_payload(payload: dict) -> dict:
 def main() -> int:
     org = require_env("TARGET_ORG")
     orchestrator_repo = require_env("ORCHESTRATOR_REPO")
+    allowlist = load_orchestrator_allowlist()
+    if orchestrator_repo not in allowlist and f"{org}/{orchestrator_repo}" not in allowlist:
+        raise SystemExit(f"Orchestrator repo not allowlisted: {orchestrator_repo}")
     app_id = require_secret("GH_ORG_POLLING_APP_ID")
     pem_path = require_env("GH_ORG_POLLING_APP_PEM_FILE")
     install_json = require_secret("GH_INSTALL_JSON")

@@ -15,6 +15,11 @@ from _common import (
     validate_ref_name,
 )
 from repo_filters import apply_filters
+from log_sanitize import sanitize
+
+
+def audit_log(message: str) -> None:
+    print(sanitize(message))
 
 
 def main() -> int:
@@ -77,9 +82,13 @@ def main() -> int:
                     "job_type": "polling",
                 }
             )
+            audit_log(
+                f"[audit] upstream divergence org={org} repo={full_name} parent={parent_full} branch={parent_branch}"
+            )
 
     output = Path(os.environ.get("OUTPUT_PATH", "polling.json"))
     output.write_text(json.dumps(payloads, indent=2), encoding="utf-8")
+    audit_log(f"[audit] poll summary org={org} payloads={len(payloads)}")
     print(output.as_posix())
     return 0
 

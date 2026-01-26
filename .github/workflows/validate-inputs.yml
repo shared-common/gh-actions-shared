@@ -23,9 +23,42 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
+      - name: Validate shared inputs
+        shell: bash
+        env:
+          SHARED_REPO: ${{ inputs.shared-repo }}
+          SHARED_REF: ${{ inputs.shared-ref }}
+          PAYLOAD: ${{ inputs.payload }}
+        run: |
+          set -euo pipefail
+          allowed_repo="shared-common/gh-actions-shared"
+          allowed_refs="196e9781c87e8d2db80c847e04488abadbd1af54"
+          if [ "$SHARED_REPO" != "$allowed_repo" ]; then
+            printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
+            exit 1
+          fi
+          allowed=false
+          for ref in $allowed_refs; do
+            if [ "$SHARED_REF" = "$ref" ]; then
+              allowed=true
+              break
+            fi
+          done
+          if [ "$allowed" != "true" ]; then
+            printf '%s\n' "shared-ref not allowlisted: $SHARED_REF" >&2
+            exit 1
+          fi
+          max_bytes=262144
+          payload_size="$(printf '%s' "$PAYLOAD" | wc -c | tr -d '[:space:]')"
+          if [ "${payload_size}" -gt "${max_bytes}" ]; then
+            printf '%s\n' "payload too large: ${payload_size} bytes" >&2
+            exit 1
+          fi
+
       - name: Checkout shared workflows
         # actions/checkout v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
