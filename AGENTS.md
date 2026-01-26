@@ -8,6 +8,7 @@ Shared GitHub Actions workflows, scripts, and composite actions used by org-spec
 - All `uses:` references must be pinned to a commit SHA.
 - Keep permissions minimal (`contents: read` by default).
 - All shared workflows must validate event context against `configs/event-allowlist.json`.
+- Shared workflows must pin `actions/setup-python` to the latest stable Python release.
 
 ## Security
 - Do not print secrets.

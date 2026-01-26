@@ -7,9 +7,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 GITHUB_API = "https://api.github.com"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -149,9 +148,12 @@ def get_installation_token(app_id: str, pem_path: str, installation_id: int) -> 
 
 
 def parse_installations(value: str) -> Dict[str, int]:
-    data = json.loads(value)
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("GH_INSTALL_JSON is not valid JSON") from exc
     if not isinstance(data, dict):
-        return {}
+        raise SystemExit("GH_INSTALL_JSON must be a JSON object mapping org to installation id")
     out: Dict[str, int] = {}
     for key, val in data.items():
         if isinstance(val, int):
