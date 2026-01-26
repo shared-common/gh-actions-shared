@@ -24,3 +24,6 @@ Optional fields:
 - `repo_parent_default_branch`
 
 All payloads are JSON objects; invalid payloads fail closed.
+
+> If `repo_parent_full_name` is provided, `repo_parent_default_branch` **must** be set
+> (this supports fork parents whose default branch is not `main`).

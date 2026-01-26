@@ -51,12 +51,16 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         validate_ref_name(default_branch, "repo_default_branch")
 
     parent_full = payload.get("repo_parent_full_name")
+    repo_is_fork = payload.get("repo_is_fork")
+    if repo_is_fork is True and not isinstance(parent_full, str):
+        raise SystemExit("repo_is_fork is true but repo_parent_full_name is missing")
     if isinstance(parent_full, str):
         validate_repo_full_name(parent_full)
         parent_branch = payload.get("repo_parent_default_branch")
-        if isinstance(parent_branch, str):
-            validate_ref_name(parent_branch, "repo_parent_default_branch")
-        if payload.get("repo_is_fork") is False:
+        if not isinstance(parent_branch, str):
+            raise SystemExit("repo_parent_default_branch is required when repo_parent_full_name is set")
+        validate_ref_name(parent_branch, "repo_parent_default_branch")
+        if repo_is_fork is False:
             raise SystemExit("repo_parent_full_name provided but repo_is_fork is false")
 
     return payload, org
