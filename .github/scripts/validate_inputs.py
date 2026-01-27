@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -8,6 +9,10 @@ from event_validation import validate_event_context
 from json_schema import load_json, validate
 
 ALLOWED_JOB_TYPES = {"create", "polling", "sync"}
+EVENT_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+ORG_RE = re.compile(r"^[A-Za-z0-9-]+$")
+UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 
 
 def load_payload() -> Dict[str, Any]:
@@ -31,6 +36,16 @@ def load_payload() -> Dict[str, Any]:
 
 
 def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+    for key in (
+        "action",
+        "ref",
+        "after",
+        "source_repo_full_name",
+        "repo_parent_full_name",
+        "repo_parent_default_branch",
+    ):
+        if payload.get(key) == "":
+            payload[key] = None
     if "job_type" not in payload:
         payload["job_type"] = "create"
     schema_path = os.environ.get("INPUT_SCHEMA_PATH", config_path("inputs.schema.json"))
@@ -38,6 +53,20 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     validate(payload, schema)
 
     org, repo = validate_repo_full_name(payload.get("repo_full_name"))
+    org_login = payload.get("org_login")
+    if not isinstance(org_login, str) or not ORG_RE.match(org_login):
+        raise SystemExit("org_login must be a valid org name")
+    if org_login != org:
+        raise SystemExit("org_login does not match repo_full_name")
+    event_name = payload.get("event_name")
+    if not isinstance(event_name, str) or not EVENT_NAME_RE.match(event_name):
+        raise SystemExit("event_name must be a valid event name")
+    delivery_id = payload.get("delivery_id")
+    if not isinstance(delivery_id, str) or not UUID_RE.match(delivery_id):
+        raise SystemExit("delivery_id must be a UUID string")
+    repo_id = payload.get("repo_id")
+    if not isinstance(repo_id, int) or repo_id <= 0:
+        raise SystemExit("repo_id must be a positive integer")
     target_org = os.environ.get("TARGET_ORG")
     if target_org and org != target_org:
         raise SystemExit("repo_full_name org does not match target org")
@@ -49,6 +78,23 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     default_branch = payload.get("repo_default_branch")
     if isinstance(default_branch, str):
         validate_ref_name(default_branch, "repo_default_branch")
+
+    action = payload.get("action")
+    if action is not None and not isinstance(action, str):
+        raise SystemExit("action must be a string or null")
+
+    ref_value = payload.get("ref")
+    if isinstance(ref_value, str):
+        validate_ref_name(ref_value, "ref")
+
+    after_value = payload.get("after")
+    if isinstance(after_value, str) and after_value:
+        if not SHA_RE.match(after_value.lower()):
+            raise SystemExit("after must be a commit SHA when provided")
+
+    source_repo = payload.get("source_repo_full_name")
+    if isinstance(source_repo, str):
+        validate_repo_full_name(source_repo)
 
     parent_full = payload.get("repo_parent_full_name")
     repo_is_fork = payload.get("repo_is_fork")
