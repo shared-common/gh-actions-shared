@@ -63,7 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           allowed_repo="shared-common/gh-actions-shared"
-          allowed_refs="196e9781c87e8d2db80c847e04488abadbd1af54 b5597ca885f041cc47f5bddbcb5df654411185ac"
+          allowed_refs="196e9781c87e8d2db80c847e04488abadbd1af54 \
+          b5597ca885f041cc47f5bddbcb5df654411185ac"
           if [ "$SHARED_REPO" != "$allowed_repo" ]; then
             printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
             exit 1
@@ -80,12 +81,16 @@ jobs:
             exit 1
           fi
           max_bytes=262144
-          size="$(printf '%s' "$EVENT_CONTEXT" | wc -c | tr -d '[:space:]')"
+          size="$(
+            printf '%s' "$EVENT_CONTEXT" | wc -c | tr -d '[:space:]'
+          )"
           if [ "${size}" -gt "${max_bytes}" ]; then
             printf '%s\n' "event-context too large: ${size} bytes" >&2
             exit 1
           fi
-          payload_size="$(printf '%s' "$EVENT_PAYLOAD" | wc -c | tr -d '[:space:]')"
+          payload_size="$(
+            printf '%s' "$EVENT_PAYLOAD" | wc -c | tr -d '[:space:]'
+          )"
           if [ "${payload_size}" -gt "${max_bytes}" ]; then
             printf '%s\n' "event-payload too large: ${payload_size} bytes" >&2
             exit 1
