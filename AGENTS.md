@@ -9,7 +9,7 @@ Shared GitHub Actions workflows, scripts, and composite actions used by org-spec
 - Keep permissions minimal (`contents: read` by default).
 - All shared workflows must validate event context against `configs/event-allowlist.json`.
 - Shared workflows must pin `actions/setup-python` to the latest stable Python release.
-- Scheduled polling should run from dedicated public `*-polling` repos.
+- Fork drift polling is initiated by the Worker cron; no dedicated polling repos are used.
 - Workflow-level permissions must be `{}`; set minimal permissions per job.
 
 ## Security

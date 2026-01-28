@@ -1,6 +1,6 @@
 ---
 name: "dispatch-workflow"
-description: "Dispatch repository_dispatch events"
+description: "Dispatch workflow_dispatch events"
 inputs:
   token:
     required: true
@@ -8,11 +8,13 @@ inputs:
     required: true
   repo:
     required: true
-  event-type:
+  workflow:
     required: true
-  payload:
+  ref:
+    required: true
+  inputs:
     required: false
-  payload-path:
+  inputs-path:
     required: false
 
 runs:
@@ -24,9 +26,10 @@ runs:
         TOKEN: ${{ inputs.token }}
         OWNER: ${{ inputs.owner }}
         REPO: ${{ inputs.repo }}
-        EVENT_TYPE: ${{ inputs.event-type }}
-        PAYLOAD: ${{ inputs.payload }}
-        PAYLOAD_PATH: ${{ inputs.payload-path }}
+        WORKFLOW: ${{ inputs.workflow }}
+        REF: ${{ inputs.ref }}
+        INPUTS: ${{ inputs.inputs }}
+        INPUTS_PATH: ${{ inputs.inputs-path }}
       run: |
         set -euo pipefail
         python3 "${{ github.action_path }}/dispatch.py"

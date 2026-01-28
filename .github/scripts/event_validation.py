@@ -26,7 +26,18 @@ def validate_event_context(
         raise SystemExit(f"Event '{event_name}' is not allowed")
 
     action = event.get("action")
-    if event_name == "repository_dispatch":
+    if event_name == "workflow_dispatch":
+        inputs = event.get("inputs")
+        if not isinstance(inputs, dict):
+            raise SystemExit("workflow_dispatch inputs missing from event")
+        dispatch_action = inputs.get("dispatch_action")
+        if not isinstance(dispatch_action, str):
+            raise SystemExit("workflow_dispatch dispatch_action missing from event inputs")
+        if allowed_actions and dispatch_action not in allowed_actions:
+            raise SystemExit(f"Event action '{dispatch_action}' is not allowed")
+        if expected_action and dispatch_action != expected_action:
+            raise SystemExit(f"Unexpected event action '{dispatch_action}'")
+    elif event_name == "repository_dispatch":
         if not isinstance(action, str):
             raise SystemExit("repository_dispatch action missing from event")
         if allowed_actions and action not in allowed_actions:

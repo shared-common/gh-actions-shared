@@ -8,7 +8,6 @@ lives here**.
 ## Components
 - **Reusable workflows** (`*-core.yml`):
   - `orchestrator-core`: branch creation/update
-  - `poller-core`: check upstream fork divergence and trigger orchestrator
   - `discover-core`: enumerate org repos for discovery runs
   - `summary-core`: render summaries for job outputs
 - **Composite actions**: BWS secret fetch, JSON validation, dispatch helper, job summary.
@@ -17,8 +16,8 @@ lives here**.
 
 ## Data flow
 1. GitHub App webhook → Cloudflare Worker
-2. Worker sends `repository_dispatch` to **private** orchestrator wrapper repo
-3. Scheduled poller runs from **public** `*-polling` repo and dispatches orchestrator
+2. Worker sends `workflow_dispatch` to **private** wrapper repo
+3. Worker cron detects fork drift and dispatches `polling.yml` as needed
 4. Wrapper invokes shared workflow with event context + payload
 5. Shared workflow validates event, then performs the job
 

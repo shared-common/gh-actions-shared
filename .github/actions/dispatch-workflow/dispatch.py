@@ -15,10 +15,11 @@ def main() -> int:
     token = os.environ.get("TOKEN")
     owner = os.environ.get("OWNER")
     repo = os.environ.get("REPO")
-    event_type = os.environ.get("EVENT_TYPE")
-    payload_path = os.environ.get("PAYLOAD_PATH")
-    payload_inline = os.environ.get("PAYLOAD")
-    if not token or not owner or not repo or not event_type:
+    workflow = os.environ.get("WORKFLOW")
+    ref = os.environ.get("REF")
+    payload_path = os.environ.get("INPUTS_PATH")
+    payload_inline = os.environ.get("INPUTS")
+    if not token or not owner or not repo or not workflow or not ref:
         raise SystemExit("Missing required inputs")
     payload = {}
     if payload_path:
@@ -34,9 +35,12 @@ def main() -> int:
             payload = json.loads(payload_inline)
         except json.JSONDecodeError as exc:
             raise SystemExit(f"Payload inline JSON invalid: {exc.msg}") from exc
-    body = json.dumps({"event_type": event_type, "client_payload": payload}).encode("utf-8")
+    if not isinstance(payload, dict):
+        raise SystemExit("Inputs payload must be a JSON object")
+    inputs = {str(key): str(value) for key, value in payload.items() if value is not None}
+    body = json.dumps({"ref": ref, "inputs": inputs}).encode("utf-8")
     req = urllib.request.Request(
-        url=f"https://api.github.com/repos/{owner}/{repo}/dispatches",
+        url=f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches",
         data=body,
         headers={
             "Accept": "application/vnd.github+json",

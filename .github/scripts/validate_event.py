@@ -16,7 +16,11 @@ def _parse_int(value: object, label: str) -> int:
     return parsed
 
 
-def _extract_app_id(event: dict) -> int:
+def _extract_app_id(event: dict, event_name: str) -> int:
+    if event_name == "workflow_dispatch":
+        inputs = event.get("inputs")
+        if isinstance(inputs, dict) and "app_id" in inputs:
+            return _parse_int(inputs.get("app_id"), "inputs.app_id")
     if "app_id" in event:
         return _parse_int(event.get("app_id"), "app_id")
     app = event.get("app")
@@ -28,7 +32,7 @@ def _extract_app_id(event: dict) -> int:
     raise SystemExit("app_id missing from event context")
 
 
-def _validate_sender(event: dict) -> None:
+def _validate_sender(event: dict, event_name: str) -> None:
     sender = event.get("sender")
     if not isinstance(sender, dict):
         raise SystemExit("sender must be a JSON object")
@@ -37,17 +41,16 @@ def _validate_sender(event: dict) -> None:
         raise SystemExit("sender.type must be User or Bot")
     _parse_int(sender.get("id"), "sender.id")
     expected_app_id = _load_expected_app_id()
-    app_id = _extract_app_id(event)
+    app_id = _extract_app_id(event, event_name)
     if app_id != expected_app_id:
         raise SystemExit("app_id does not match expected GitHub App id")
 
 
 def _load_expected_app_id() -> int:
-    for key in ("GH_ORG_SHARED_APP_ID", "GH_ORG_POLLING_APP_ID"):
-        file_path = os.environ.get(f"{key}_FILE", "").strip()
-        if file_path:
-            return _parse_int(require_secret(key), key)
-    raise SystemExit("Missing required secret file env var: GH_ORG_SHARED_APP_ID_FILE or GH_ORG_POLLING_APP_ID_FILE")
+    file_path = os.environ.get("GH_ORG_SHARED_APP_ID_FILE", "").strip()
+    if file_path:
+        return _parse_int(require_secret("GH_ORG_SHARED_APP_ID"), "GH_ORG_SHARED_APP_ID")
+    raise SystemExit("Missing required secret file env var: GH_ORG_SHARED_APP_ID_FILE")
 
 
 def main() -> int:
@@ -61,7 +64,7 @@ def main() -> int:
     if not isinstance(event, dict):
         raise SystemExit("Event context must be a JSON object")
 
-    _validate_sender(event)
+    _validate_sender(event, event_name)
 
     target_org = os.environ.get("TARGET_ORG")
     allowlist_path = os.environ.get("EVENT_ALLOWLIST_PATH", config_path("event-allowlist.json"))

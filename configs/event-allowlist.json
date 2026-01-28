@@ -1,4 +1,3 @@
 {
-  "repository_dispatch": ["orchestrator", "discover", "summary"],
-  "schedule": ["poller"]
+  "workflow_dispatch": ["orchestrator", "discover", "summary", "repository", "fork", "polling"]
 }

@@ -1,3 +1,3 @@
 # dispatch-workflow
 
-Dispatch `repository_dispatch` events using a provided token.
+Dispatch `workflow_dispatch` events using a provided token.

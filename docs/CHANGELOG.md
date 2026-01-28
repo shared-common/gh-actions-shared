@@ -7,5 +7,5 @@
 - Improved BWS secret handling and dispatch error reporting.
 - Pinned actions/checkout and actions/setup-python (v6.1.0); enforced Python 3.14.2.
 - Tightened GH_INSTALL_JSON parsing errors and aligned docs/AGENTS.
-- Documented split of scheduled polling into dedicated public `*-polling` repos.
-- Poller now uses `GH_ORG_POLLING_APP_ID`/`GH_ORG_POLLING_APP_PEM` secrets.
+- Worker cron now drives fork drift checks (no polling repos).
+- Workflow dispatch replaces repository_dispatch in wrapper repos.
