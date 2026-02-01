@@ -43,7 +43,7 @@ runs:
           -o "${tmp_dir}/${checksum_file}" "${base_url}/${checksum_file}"
         expected="$(awk -v f="${archive}" '
           name=$2
-          if (name ~ /^\*/) { name=substr(name,2) }
+          if (substr(name,1,1)=="*") { name=substr(name,2) }
           if (substr(name,1,2)=="./") { name=substr(name,3) }
           sub(/\r$/, "", name)
           if (name==f) { print $1; exit }
