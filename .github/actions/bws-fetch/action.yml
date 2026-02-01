@@ -35,8 +35,11 @@ runs:
         base_url="https://github.com/mattycramer/sdk-sm/releases/download/gl-bws-cli-v${version}"
         archive="bws-x86_64-unknown-linux-gnu-${version}.tar.gz"
         checksum_file="bws-sha256-checksums-${version}.txt"
-        tmp_dir="$(mktemp -d)"
-        trap 'rm -rf "${tmp_dir}"' EXIT
+        if [ -z "${RUNNER_TEMP:-}" ]; then
+          echo "RUNNER_TEMP is not set" >&2
+          exit 1
+        fi
+        tmp_dir="$(mktemp -d "${RUNNER_TEMP}/bws-${version}-XXXXXX")"
         curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 \
           -o "${tmp_dir}/${archive}" "${base_url}/${archive}"
         curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 \
@@ -78,8 +81,22 @@ runs:
         printf '%s  %s\n' "${expected}" "${archive}" > "${tmp_dir}/bws.sha256"
         (cd "${tmp_dir}" && sha256sum -c bws.sha256)
         tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}"
-        chmod 0755 "${tmp_dir}/bws"
-        echo "${tmp_dir}" >> "$GITHUB_PATH"
+        bws_path="${tmp_dir}/bws"
+        if [ ! -x "${bws_path}" ]; then
+          bws_path="$(
+            find "${tmp_dir}" -type f -name bws -perm -u+x \
+              | head -n 1
+          )"
+        fi
+        if [ -z "${bws_path}" ]; then
+          echo "bws binary not found after extraction" >&2
+          exit 1
+        fi
+        chmod 0755 "${bws_path}"
+        bws_dir="$(dirname "${bws_path}")"
+        echo "${bws_dir}" >> "$GITHUB_PATH"
+        echo "BWS_BIN=${bws_path}" >> "$GITHUB_ENV"
+        echo "BWS_TMP_DIR=${tmp_dir}" >> "$GITHUB_ENV"
     - name: Fetch secrets
       shell: bash
       env:
@@ -89,7 +106,14 @@ runs:
         OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
         set -euo pipefail
-        bws run --project-id "${BWS_PROJECT_ID}" --no-inherit-env -- \
+        if [ -z "${BWS_BIN:-}" ]; then
+          echo "BWS_BIN is not set" >&2
+          exit 1
+        fi
+        "${BWS_BIN}" run --project-id "${BWS_PROJECT_ID}" --no-inherit-env -- \
           env SECRETS="${SECRETS}" OUTPUT_DIR="${OUTPUT_DIR}" \
           GITHUB_ENV="${GITHUB_ENV}" PATH="${PATH}" \
           python3 "${{ github.action_path }}/write_secrets.py"
+        if [ -n "${BWS_TMP_DIR:-}" ]; then
+          rm -rf "${BWS_TMP_DIR}"
+        fi
