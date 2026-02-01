@@ -11,7 +11,7 @@ repos**; this repository stays org‑agnostic.
 - JSON configs/schemas used by the workflows
 
 ## Key guarantees
-- **Pinned dependencies**: all `uses:` references pinned to commit SHA.
+- **Pinned dependencies**: third-party `uses:` references pinned to commit SHA; shared workflows are versioned by release tag (for example, `v0.0.1`).
 - **Secrets via files**: secrets are materialized into `*_FILE` paths only.
 - **Event validation**: workflow_dispatch events are checked against
   `configs/event-allowlist.json` before work begins.

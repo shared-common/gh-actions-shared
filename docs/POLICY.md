@@ -2,7 +2,7 @@
 
 ## Shared repo rules
 - No org‑specific data or secrets in this repo.
-- All `uses:` references must be pinned to commit SHA.
+- Third-party `uses:` references must be pinned to commit SHA; wrapper repos must use release tags (for example, `v0.0.1`) when calling shared workflows.
 - Secrets are consumed via `*_FILE` paths only.
 - Events must pass allowlist validation before any action.
 
