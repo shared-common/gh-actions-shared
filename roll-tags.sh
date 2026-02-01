@@ -15,6 +15,15 @@ Behavior:
 EOF
 }
 
+log() {
+  printf '%s\n' "$*"
+}
+
+run() {
+  log "+ $*"
+  "$@"
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
@@ -53,7 +62,7 @@ if [[ "$BRANCH" != "main" ]]; then
   exit 1
 fi
 
-git -C "$ROOT" fetch --tags origin
+run git -C "$ROOT" fetch --tags origin
 if git -C "$ROOT" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
   echo "Error: tag '${TAG}' already exists. Refusing to move tags." >&2
   exit 1
@@ -71,8 +80,9 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
   exit 1
 fi
 
+log "Updating allowlisted tag in shared workflows to '${TAG}'"
 for file in "${FILES[@]}"; do
-  sed -i -E \
+  run sed -i -E \
     "s|(allowed_refs=\")v[^\"]+(\")|\\1${TAG}\\2|g" \
     "$file"
 done
@@ -82,8 +92,10 @@ if git -C "$ROOT" diff --quiet -- "$WORKFLOWS_DIR"; then
   exit 1
 fi
 
-git -C "$ROOT" add "$WORKFLOWS_DIR"
-git -C "$ROOT" commit -m "chore: roll shared tag to ${TAG}"
-git -C "$ROOT" tag -a "$TAG" -m "gh-actions-shared ${TAG}"
-git -C "$ROOT" push origin main
-git -C "$ROOT" push origin "$TAG"
+log "Workflow changes:"
+run git -C "$ROOT" diff --stat -- "$WORKFLOWS_DIR"
+run git -C "$ROOT" add "$WORKFLOWS_DIR"
+run git -C "$ROOT" commit -m "chore: roll shared tag to ${TAG}"
+run git -C "$ROOT" tag -a "$TAG" -m "gh-actions-shared ${TAG}"
+run git -C "$ROOT" push origin main
+run git -C "$ROOT" push origin "$TAG"
