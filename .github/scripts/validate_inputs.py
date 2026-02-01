@@ -4,7 +4,14 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-from _common import config_path, require_secret, validate_ref_name, validate_repo_full_name
+from _common import (
+    config_path,
+    get_installation_token_for_org,
+    get_repo,
+    require_secret,
+    validate_ref_name,
+    validate_repo_full_name,
+)
 from event_validation import validate_event_context
 from json_schema import load_json, validate
 
@@ -97,12 +104,36 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         validate_repo_full_name(source_repo)
 
     parent_full = payload.get("repo_parent_full_name")
+    parent_branch = payload.get("repo_parent_default_branch")
     repo_is_fork = payload.get("repo_is_fork")
     if repo_is_fork is True and not isinstance(parent_full, str):
-        raise SystemExit("repo_is_fork is true but repo_parent_full_name is missing")
+        app_id = require_secret("GH_ORG_SHARED_APP_ID")
+        pem_path = os.environ.get("GH_ORG_SHARED_APP_PEM_FILE", "").strip()
+        if not pem_path:
+            raise SystemExit("Missing required env var: GH_ORG_SHARED_APP_PEM_FILE")
+        install_json = require_secret("GH_INSTALL_JSON")
+        org_login = payload.get("org_login")
+        if not isinstance(org_login, str):
+            raise SystemExit("org_login must be a string")
+        token = get_installation_token_for_org(app_id, pem_path, install_json, org_login)
+        repo_full_name = payload.get("repo_full_name")
+        org_owner, repo_name = validate_repo_full_name(repo_full_name)
+        repo_info = get_repo(token, org_owner, repo_name)
+        parent_info = repo_info.get("parent") if isinstance(repo_info, dict) else None
+        if not isinstance(parent_info, dict):
+            raise SystemExit("repo_is_fork is true but repo_parent_full_name is missing")
+        parent_full_name = parent_info.get("full_name")
+        parent_default_branch = parent_info.get("default_branch")
+        if not isinstance(parent_full_name, str):
+            raise SystemExit("repo_parent_full_name missing from GitHub API response")
+        if not isinstance(parent_default_branch, str):
+            raise SystemExit("repo_parent_default_branch missing from GitHub API response")
+        payload["repo_parent_full_name"] = parent_full_name
+        payload["repo_parent_default_branch"] = parent_default_branch
+        parent_full = parent_full_name
+        parent_branch = parent_default_branch
     if isinstance(parent_full, str):
         validate_repo_full_name(parent_full)
-        parent_branch = payload.get("repo_parent_default_branch")
         if not isinstance(parent_branch, str):
             raise SystemExit("repo_parent_default_branch is required when repo_parent_full_name is set")
         validate_ref_name(parent_branch, "repo_parent_default_branch")
