@@ -41,17 +41,40 @@ runs:
           -o "${tmp_dir}/${archive}" "${base_url}/${archive}"
         curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 \
           -o "${tmp_dir}/${checksum_file}" "${base_url}/${checksum_file}"
-        expected="$(awk -v f="${archive}" '
-          name=$2
-          if (substr(name,1,1)=="*") { name=substr(name,2) }
-          if (substr(name,1,2)=="./") { name=substr(name,3) }
-          sub(/\r$/, "", name)
-          if (name==f) { print $1; exit }
-        ' "${tmp_dir}/${checksum_file}")"
-        if [ -z "${expected}" ]; then
+        expected="$(
+          python3 - "${tmp_dir}/${checksum_file}" "${archive}" <<'PY'
+import sys
+
+checksum_path = sys.argv[1]
+target = sys.argv[2]
+expected = ""
+
+with open(checksum_path, "r", encoding="utf-8") as handle:
+    for line in handle:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        checksum, name = parts[0], parts[1]
+        if name.startswith("*"):
+            name = name[1:]
+        if name.startswith("./"):
+            name = name[2:]
+        if name == target:
+            expected = checksum
+            break
+
+if not expected:
+    sys.exit(1)
+
+print(expected)
+PY
+        )" || {
           echo "Checksum for ${archive} not found" >&2
           exit 1
-        fi
+        }
         if [ "${expected}" != "${checksum}" ]; then
           echo "Checksum mismatch for ${archive}" >&2
           exit 1
