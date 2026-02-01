@@ -26,6 +26,12 @@ Shared GitHub Actions workflows, scripts, and composite actions used by org-spec
 ## Release tags: creation, push, and roll-forward
 Tags are the contract for wrapper repos. Do not move tags after publication.
 
+### Helper script (preferred)
+Use the repo helper to roll a new tag and update workflow allowlists:
+```bash
+./roll-tags.sh --v0.0.2
+```
+
 ### Create + push a new tag (in gh-actions-shared)
 1) Make the workflow/script changes in `main` and update `allowed_refs` to include the new tag.
 2) Ensure workflows pass linting/tests.
