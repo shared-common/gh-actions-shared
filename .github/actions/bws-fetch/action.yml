@@ -106,6 +106,16 @@ runs:
         OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
         set -euo pipefail
+        access_token_clean="$(printf '%s' "${BWS_ACCESS_TOKEN}" | tr -d '[:space:]')"
+        project_id_clean="$(printf '%s' "${BWS_PROJECT_ID}" | tr -d '[:space:]')"
+        if [ -z "${access_token_clean}" ]; then
+          echo "BWS_ACCESS_TOKEN resolved to empty after normalization" >&2
+          exit 1
+        fi
+        if [ -z "${project_id_clean}" ]; then
+          echo "BWS_PROJECT_ID resolved to empty after normalization" >&2
+          exit 1
+        fi
         secrets_clean="$(printf '%s' "${SECRETS}" | tr -d '[:space:]')"
         if [ -z "${secrets_clean}" ]; then
           echo "SECRETS resolved to empty after normalization" >&2
@@ -115,7 +125,8 @@ runs:
           echo "BWS_BIN is not set" >&2
           exit 1
         fi
-        "${BWS_BIN}" run --project-id "${BWS_PROJECT_ID}" --no-inherit-env -- \
+        BWS_ACCESS_TOKEN="${access_token_clean}" BWS_PROJECT_ID="${project_id_clean}" \
+          "${BWS_BIN}" run --project-id "${project_id_clean}" --no-inherit-env -- \
           env SECRETS="${secrets_clean}" OUTPUT_DIR="${OUTPUT_DIR}" \
           GITHUB_ENV="${GITHUB_ENV}" PATH="${PATH}" \
           python3 "${{ github.action_path }}/write_secrets.py"
