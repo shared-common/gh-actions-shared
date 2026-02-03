@@ -8,7 +8,6 @@ from _common import (
     create_branch,
     get_branch_sha,
     get_installation_token_for_org,
-    parse_installations,
     require_env,
     require_secret,
     update_branch,
@@ -42,22 +41,6 @@ def get_base_sha(
 ) -> str:
     default_branch = _coerce_branch(input_data.get("repo_default_branch") or "main", "repo_default_branch")
     base_token = get_installation_token_for_org(app_id, pem_path, install_json, org)
-    install_map = parse_installations(install_json)
-    if input_data.get("repo_parent_full_name"):
-        parent_full = input_data.get("repo_parent_full_name")
-        if isinstance(parent_full, str) and "/" in parent_full:
-            parent_org, parent_repo = validate_repo_full_name(parent_full)
-            parent_branch = _coerce_branch(
-                input_data.get("repo_parent_default_branch") or default_branch, "repo_parent_default_branch"
-            )
-            if parent_org != org and parent_org not in install_map:
-                return get_branch_sha(base_token, org, repo, str(default_branch))
-            parent_token = (
-                base_token
-                if parent_org == org
-                else get_installation_token_for_org(app_id, pem_path, install_json, parent_org)
-            )
-            return get_branch_sha(parent_token, parent_org, parent_repo, parent_branch)
     return get_branch_sha(base_token, org, repo, str(default_branch))
 
 
