@@ -101,6 +101,9 @@ def main() -> int:
         return main_sha
 
     results: Dict[str, List[str]] = {"created": [], "updated": [], "skipped": []}
+    repo_is_fork = input_data.get("repo_is_fork") is True
+    repo_default_branch = input_data.get("repo_default_branch")
+    parent_default_branch = input_data.get("repo_parent_default_branch")
 
     for spec in policy.order:
         full = spec.full_name
@@ -111,6 +114,20 @@ def main() -> int:
         results["created"].append(full)
 
     if job_type in {"polling", "sync"}:
+        if (
+            job_type == "polling"
+            and repo_is_fork
+            and isinstance(repo_default_branch, str)
+            and isinstance(parent_default_branch, str)
+            and repo_default_branch == parent_default_branch
+        ):
+            try:
+                current_default = get_branch_sha(token, org, repo, repo_default_branch)
+            except SystemExit:
+                current_default = ""
+            if current_default != upstream_sha:
+                update_branch(token, org, repo, repo_default_branch, upstream_sha, force=True)
+                results["updated"].append(repo_default_branch)
         for spec in policy.order:
             if not spec.update:
                 continue
