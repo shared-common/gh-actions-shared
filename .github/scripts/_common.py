@@ -158,6 +158,68 @@ def github_request(
             raise ApiError(0, f"Network error contacting GitHub API: {exc}") from exc
 
 
+def github_request_public(
+    method: str,
+    path: str,
+    payload: Optional[dict] = None,
+    *,
+    retries: int = 3,
+    timeout: int = 30,
+) -> Any:
+    url = f"{GITHUB_API}{path}"
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gh-actions-shared",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if data:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url=url, data=data, headers=headers, method=method)
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read()
+                if not body:
+                    return None
+                try:
+                    return json.loads(body.decode("utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise ApiError(resp.status, "Invalid JSON response from GitHub API") from exc
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            body = sanitize(body)
+            if exc.code == 403 and attempt < retries - 1:
+                headers = exc.headers or {}
+                retry_after_raw = headers.get("Retry-After")
+                wait = None
+                if retry_after_raw and retry_after_raw.isdigit():
+                    wait = int(retry_after_raw)
+                else:
+                    remaining = headers.get("X-RateLimit-Remaining")
+                    reset_raw = headers.get("X-RateLimit-Reset")
+                    if remaining == "0" and reset_raw and reset_raw.isdigit():
+                        reset_at = int(reset_raw)
+                        wait = max(0, reset_at - int(time.time()))
+                if wait is not None:
+                    wait = max(1, min(60, wait))
+                    time.sleep(wait)
+                    attempt += 1
+                    continue
+            if exc.code in {500, 502, 503, 504} and attempt < retries - 1:
+                time.sleep(1 + attempt)
+                attempt += 1
+                continue
+            raise ApiError(exc.code, body or "GitHub API error") from exc
+        except urllib.error.URLError as exc:
+            if attempt < retries - 1:
+                time.sleep(1 + attempt)
+                attempt += 1
+                continue
+            raise ApiError(0, f"Network error contacting GitHub API: {exc}") from exc
+
+
 def get_installation_token(app_id: str, pem_path: str, installation_id: int) -> str:
     jwt = create_app_jwt(app_id, pem_path)
     data = github_request(jwt, "POST", f"/app/installations/{installation_id}/access_tokens")
@@ -244,6 +306,15 @@ def get_repo(token: str, owner: str, repo: str) -> dict:
 def get_branch_sha(token: str, owner: str, repo: str, branch: str) -> str:
     ref = urllib.parse.quote(branch, safe="")
     data = github_request(token, "GET", f"/repos/{owner}/{repo}/git/ref/heads/{ref}")
+    sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
+    if not sha:
+        raise SystemExit(f"Missing SHA for branch {branch}")
+    return str(sha)
+
+
+def get_branch_sha_public(owner: str, repo: str, branch: str) -> str:
+    ref = urllib.parse.quote(branch, safe="")
+    data = github_request_public("GET", f"/repos/{owner}/{repo}/git/ref/heads/{ref}")
     sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
     if not sha:
         raise SystemExit(f"Missing SHA for branch {branch}")

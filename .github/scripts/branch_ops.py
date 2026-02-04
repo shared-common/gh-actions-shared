@@ -7,7 +7,10 @@ from _common import (
     branch_exists,
     create_branch,
     get_branch_sha,
+    get_branch_sha_public,
+    get_installation_token,
     get_installation_token_for_org,
+    parse_installations,
     require_env,
     require_secret,
     update_branch,
@@ -36,12 +39,32 @@ def _coerce_branch(value: object, label: str) -> str:
     return value
 
 
-def get_base_sha(
-    input_data: dict, org: str, repo: str, app_id: str, pem_path: str, install_json: str
+def _resolve_upstream_ref(input_data: dict, org: str, repo: str, default_branch: str) -> tuple[str, str, str, bool]:
+    if input_data.get("repo_is_fork") is True:
+        parent_full = input_data.get("repo_parent_full_name")
+        parent_branch = input_data.get("repo_parent_default_branch")
+        if isinstance(parent_full, str) and isinstance(parent_branch, str):
+            parent_org, parent_repo = validate_repo_full_name(parent_full)
+            validate_ref_name(parent_branch, "repo_parent_default_branch")
+            return parent_org, parent_repo, parent_branch, True
+    return org, repo, default_branch, False
+
+
+def get_upstream_sha(
+    input_data: dict, org: str, repo: str, token: str, app_id: str, pem_path: str, install_json: str
 ) -> str:
     default_branch = _coerce_branch(input_data.get("repo_default_branch") or "main", "repo_default_branch")
-    base_token = get_installation_token_for_org(app_id, pem_path, install_json, org)
-    return get_branch_sha(base_token, org, repo, str(default_branch))
+    upstream_owner, upstream_repo, upstream_branch, use_parent = _resolve_upstream_ref(
+        input_data, org, repo, default_branch
+    )
+    if not use_parent or upstream_owner == org:
+        return get_branch_sha(token, upstream_owner, upstream_repo, upstream_branch)
+    installations = parse_installations(install_json)
+    install_id = installations.get(upstream_owner)
+    if install_id:
+        parent_token = get_installation_token(app_id, pem_path, install_id)
+        return get_branch_sha(parent_token, upstream_owner, upstream_repo, upstream_branch)
+    return get_branch_sha_public(upstream_owner, upstream_repo, upstream_branch)
 
 
 def main() -> int:
@@ -64,7 +87,18 @@ def main() -> int:
     policy: BranchPolicy = load_branch_policy(policy_path)
 
     token = get_installation_token_for_org(app_id, pem_path, install_json, org)
-    base_sha = get_base_sha(input_data, org, repo, app_id, pem_path, install_json)
+    upstream_sha = get_upstream_sha(input_data, org, repo, token, app_id, pem_path, install_json)
+    base_sha = upstream_sha
+    main_spec = policy.by_env.get("GIT_BRANCH_MAIN")
+    if not main_spec:
+        raise SystemExit("Branch policy missing GIT_BRANCH_MAIN entry")
+    main_sha: str | None = None
+
+    def _get_main_sha() -> str:
+        nonlocal main_sha
+        if main_sha is None:
+            main_sha = get_branch_sha(token, org, repo, main_spec.full_name)
+        return main_sha
 
     results: Dict[str, List[str]] = {"created": [], "updated": [], "skipped": []}
 
@@ -81,12 +115,13 @@ def main() -> int:
             if not spec.update:
                 continue
             name = spec.full_name
+            desired_sha = upstream_sha if spec.track == "upstream" else _get_main_sha()
             try:
                 current = get_branch_sha(token, org, repo, name)
             except SystemExit:
                 current = ""
-            if current != base_sha:
-                update_branch(token, org, repo, name, base_sha, force=True)
+            if current != desired_sha:
+                update_branch(token, org, repo, name, desired_sha, force=True)
                 results["updated"].append(name)
 
     output_path = os.environ.get("OUTPUT_PATH")
