@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from _common import (
+    ApiError,
     branch_exists,
     create_branch,
     get_branch_sha,
@@ -126,8 +127,14 @@ def main() -> int:
             except SystemExit:
                 current_default = ""
             if current_default != upstream_sha:
-                update_branch(token, org, repo, repo_default_branch, upstream_sha, force=True)
-                results["updated"].append(repo_default_branch)
+                try:
+                    update_branch(token, org, repo, repo_default_branch, upstream_sha, force=False)
+                    results["updated"].append(repo_default_branch)
+                except ApiError as exc:
+                    if exc.status in {403, 404, 422}:
+                        results["skipped"].append(repo_default_branch)
+                    else:
+                        raise
         for spec in policy.order:
             if not spec.update:
                 continue
