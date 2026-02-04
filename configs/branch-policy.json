@@ -10,7 +10,7 @@
   "branches": [
     {"nameEnv": "GIT_BRANCH_MAIN", "track": "upstream", "update": true},
     {"nameEnv": "GIT_BRANCH_STAGING", "track": "main", "update": true},
-    {"nameEnv": "GIT_BRANCH_RELEASE", "track": "main", "update": false},
+    {"nameEnv": "GIT_BRANCH_RELEASE", "track": "main", "update": true},
     {"nameEnv": "GIT_BRANCH_SNAPSHOT", "track": "main", "update": false},
     {"nameEnv": "GIT_BRANCH_FEATURE", "track": "main", "update": false}
   ]
