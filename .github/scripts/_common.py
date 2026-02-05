@@ -333,12 +333,17 @@ def branch_exists(token: str, owner: str, repo: str, branch: str) -> bool:
 
 
 def create_branch(token: str, owner: str, repo: str, branch: str, sha: str) -> None:
-    github_request(
-        token,
-        "POST",
-        f"/repos/{owner}/{repo}/git/refs",
-        {"ref": f"refs/heads/{branch}", "sha": sha},
-    )
+    try:
+        github_request(
+            token,
+            "POST",
+            f"/repos/{owner}/{repo}/git/refs",
+            {"ref": f"refs/heads/{branch}", "sha": sha},
+        )
+    except ApiError as exc:
+        if exc.status == 422 and "reference already exists" in str(exc).lower():
+            return
+        raise
 
 
 def update_branch(token: str, owner: str, repo: str, branch: str, sha: str, force: bool = False) -> None:
