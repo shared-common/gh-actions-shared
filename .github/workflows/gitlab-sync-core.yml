@@ -107,26 +107,8 @@ jobs:
             printf 'secrets=%s\n' "${override_clean}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          common="GL_BASE_URL,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,GIT_BRANCH_STAGING,GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,GIT_BRANCH_FEATURE"
-          case "${TARGET_PROFILE}" in
-            upstream)
-              specific="GL_GROUP_TOP_UPSTREAM,GL_GROUP_SUB_CANONICAL,GL_BRIDGE_FORK_USER_SEEDBED,GL_PAT_FORK_SEEDBED_SVC"
-              ;;
-            xf-main)
-              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_MAIN,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
-              ;;
-            xf-secops)
-              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_SECOPS,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
-              ;;
-            xf-checkout)
-              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_CHECKOUT,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
-              ;;
-            *)
-              printf '%s\n' "Unsupported target-profile: ${TARGET_PROFILE}" >&2
-              exit 1
-              ;;
-          esac
-          printf 'secrets=%s,%s\n' "${common}" "${specific}" >> "$GITHUB_OUTPUT"
+          secrets="$(python3 shared/.github/scripts/print_gitlab_sync_bws_secrets.py --profile "${TARGET_PROFILE}")"
+          printf 'secrets=%s\n' "${secrets}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch secrets from BWS
         uses: ./shared/.github/actions/bws-fetch

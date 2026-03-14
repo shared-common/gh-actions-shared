@@ -8,6 +8,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import gitlab_sync  # noqa: E402
+import gitlab_sync_profile  # noqa: E402
 from branch_policy import BranchPolicy, BranchSpec  # noqa: E402
 
 
@@ -79,6 +80,40 @@ class GitlabSyncTests(unittest.TestCase):
         self.assertTrue(gitlab_sync._should_force_retry("! [rejected] main -> main (non-fast-forward)"))
         self.assertTrue(gitlab_sync._should_force_retry("remote rejected ... fetch first"))
         self.assertFalse(gitlab_sync._should_force_retry("authentication failed"))
+
+    def test_required_bws_secrets_are_profile_scoped(self):
+        self.assertEqual(
+            gitlab_sync_profile.required_bws_secrets("xf-main"),
+            (
+                "GL_BASE_URL",
+                "GIT_BRANCH_PREFIX",
+                "GIT_BRANCH_MAIN",
+                "GIT_BRANCH_STAGING",
+                "GIT_BRANCH_RELEASE",
+                "GIT_BRANCH_SNAPSHOT",
+                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_DIVERGE",
+                "GL_GROUP_SUB_XF_MAIN",
+                "GL_BRIDGE_FORK_USER_DERIVED",
+                "GL_PAT_FORK_DERIVED_SVC",
+            ),
+        )
+        self.assertEqual(
+            gitlab_sync_profile.required_bws_secrets("upstream"),
+            (
+                "GL_BASE_URL",
+                "GIT_BRANCH_PREFIX",
+                "GIT_BRANCH_MAIN",
+                "GIT_BRANCH_STAGING",
+                "GIT_BRANCH_RELEASE",
+                "GIT_BRANCH_SNAPSHOT",
+                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_UPSTREAM",
+                "GL_GROUP_SUB_CANONICAL",
+                "GL_BRIDGE_FORK_USER_SEEDBED",
+                "GL_PAT_FORK_SEEDBED_SVC",
+            ),
+        )
 
     def test_protect_branches_updates_force_push_when_existing_branch_disallows_it(self):
         calls = []

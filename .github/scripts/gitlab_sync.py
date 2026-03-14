@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from _common import ApiError, get_branch_sha, require_secret, validate_repo_full_name
 from branch_policy import BranchPolicy, load_branch_policy
+from gitlab_sync_profile import resolve_profile_values
 
 
 @dataclass(frozen=True)
@@ -66,24 +67,8 @@ def select_sync_sources(input_data: dict, tracked_sources: Sequence[str]) -> Lis
 
 
 def resolve_gitlab_target(target_profile: str, repo_name: str) -> GitlabTarget:
-    if target_profile == "upstream":
-        group_path = f"{require_secret('GL_GROUP_TOP_UPSTREAM')}/{require_secret('GL_GROUP_SUB_CANONICAL')}"
-        git_username = require_secret("GL_BRIDGE_FORK_USER_SEEDBED")
-        api_token = require_secret("GL_PAT_FORK_SEEDBED_SVC")
-    elif target_profile == "xf-main":
-        group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_MAIN')}"
-        git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
-        api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
-    elif target_profile == "xf-secops":
-        group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_SECOPS')}"
-        git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
-        api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
-    elif target_profile == "xf-checkout":
-        group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_CHECKOUT')}"
-        git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
-        api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
-    else:
-        raise SystemExit(f"Unsupported target profile for GitLab sync: {target_profile}")
+    group_top, group_sub, git_username, api_token = resolve_profile_values(target_profile, require_secret)
+    group_path = f"{group_top}/{group_sub}"
 
     return GitlabTarget(
         project_path=f"{group_path}/{repo_name}",
