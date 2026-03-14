@@ -4,7 +4,11 @@
   "properties": {
     "orgs": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9-]+$",
+        "maxLength": 100
+      },
       "minItems": 1
     }
   },

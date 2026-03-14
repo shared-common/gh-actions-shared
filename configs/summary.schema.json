@@ -2,9 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "repo": {"type": "string"},
-    "job_type": {"type": "string"},
-    "event_id": {"type": "string"},
+    "repo": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "maxLength": 300
+    },
+    "job_type": {"type": "string", "enum": ["create", "polling", "sync"]},
+    "event_id": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|(?:inventory|cron)-[0-9]{6,})$"
+    },
     "results": {
       "type": "object",
       "properties": {

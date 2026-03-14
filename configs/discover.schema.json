@@ -4,9 +4,41 @@
   "items": {
     "type": "object",
     "properties": {
-      "name": {"type": "string"},
-      "full_name": {"type": "string"},
-      "fork": {"type": "boolean"}
+      "name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.-]+$",
+        "maxLength": 200
+      },
+      "full_name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "maxLength": 300
+      },
+      "fork": {"type": "boolean"},
+      "default_branch": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "archived": {"type": "boolean"},
+      "private": {"type": "boolean"},
+      "parent": {
+        "type": ["object", "null"],
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "maxLength": 300
+          },
+          "default_branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["full_name", "default_branch"],
+        "additionalProperties": true
+      }
     },
     "required": ["name", "full_name"],
     "additionalProperties": true

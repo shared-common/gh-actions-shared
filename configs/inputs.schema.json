@@ -3,7 +3,11 @@
   "type": "object",
   "properties": {
     "event_name": {"type": "string", "maxLength": 100},
-    "delivery_id": {"type": "string", "maxLength": 200},
+    "delivery_id": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|(?:inventory|cron)-[0-9]{6,})$"
+    },
     "org_login": {"type": "string", "maxLength": 100},
     "repo_id": {"type": "integer"},
     "event_id": {"type": "string", "maxLength": 200},
