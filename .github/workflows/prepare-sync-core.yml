@@ -170,10 +170,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          delimiter="validated_payload_$(python3 - <<'PY'
+          import uuid
+          print(uuid.uuid4().hex)
+          PY
+          )"
           {
-            echo 'validated_payload<<EOF'
+            printf 'validated_payload<<%s\n' "$delimiter"
             cat validated.json
-            echo 'EOF'
+            printf '%s\n' "$delimiter"
           } >> "$GITHUB_OUTPUT"
 
       - name: Mint installation token
@@ -190,11 +195,7 @@ jobs:
           python3 shared/.github/scripts/issue_installation_token.py
           token="$(cat gh_install_token.txt)"
           echo "::add-mask::$token"
-          {
-            echo 'github_install_token<<EOF'
-            printf '%s\n' "$token"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          printf 'github_install_token=%s\n' "$token" >> "$GITHUB_OUTPUT"
 
       - name: Cleanup secrets
         if: always()
