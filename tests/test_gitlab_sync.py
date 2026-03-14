@@ -82,6 +82,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("xf-main"),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -96,6 +97,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("upstream"),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -112,6 +114,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("xf-main", include_github_app=True),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -155,19 +158,25 @@ class GitlabSyncTests(unittest.TestCase):
             self.assertIsNone(payload)
             if method != "GET":
                 self.fail("expected only GET calls")
-            if path == "/groups/derived%2Fgh-xf-checkout":
+            if path == "/groups/team%2Fsubspace":
                 raise gitlab_sync.ApiError(404, '{"message":"404 Group Not Found"}')
-            if path == "/groups?search=gh-xf-checkout&per_page=100&page=1":
+            if path == "/groups?search=subspace&per_page=100&page=1":
                 return []
-            if path == "/projects/derived%2Fgh-xf-checkout":
-                return {"id": 88, "path_with_namespace": "derived/gh-xf-checkout"}
+            if path == "/projects/team%2Fsubspace":
+                return {"id": 88, "path_with_namespace": "team/subspace"}
             self.fail(f"unexpected path: {path}")
 
         with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
             with self.assertRaises(SystemExit) as exc:
-                gitlab_sync._get_gitlab_group_id("https://gitlab.example", "token", "derived/gh-xf-checkout")
+                gitlab_sync._get_gitlab_group_id("https://gitlab.example", "token", "team/subspace")
 
-        self.assertEqual(str(exc.exception), "GitLab path exists as a project, not a group: derived/gh-xf-checkout")
+        self.assertEqual(str(exc.exception), "GitLab path exists as a project, not a group: team/subspace")
+
+    def test_require_gitlab_group_path_falls_back_to_mapping(self):
+        with mock.patch.dict("os.environ", {"TARGET_ORG": "xf-main"}, clear=False):
+            with mock.patch.object(gitlab_sync, "require_secret", return_value='{"xf-main":"derived/gh-xf-main"}'):
+                value = gitlab_sync.require_gitlab_group_path({"repo_full_name": "xf-main/demo"})
+        self.assertEqual(value, "derived/gh-xf-main")
 
     def test_protect_branches_updates_force_push_when_existing_branch_disallows_it(self):
         calls = []

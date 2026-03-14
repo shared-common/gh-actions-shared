@@ -19,10 +19,10 @@ The allowlist is defined in `configs/event-allowlist.json` and enforced by
 The `workflow_dispatch` payload (`inputs.event_payload`) is validated against `configs/inputs.schema.json`.
 Required fields:
 - `repo_full_name` (format: `<org>/<repo>`)
-- `gitlab_group_path` (format: `<top-group>/<subgroup>[...optional nested subgroup]`)
 - `job_type` (`create`, `polling`, `sync`)
 
 Optional fields:
+- `gitlab_group_path` (if omitted, shared workflows backfill it from `GL_MAPPING_JSON`)
 - `repo_default_branch`
 - `repo_is_fork`
 - `repo_parent_full_name`

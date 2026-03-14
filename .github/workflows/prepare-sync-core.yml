@@ -34,7 +34,7 @@ name: prepare-sync-core
       bws-secrets:
         required: false
         type: string
-        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON"
+        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,GL_MAPPING_JSON"
     outputs:
       validated-payload:
         description: "Validated payload JSON"

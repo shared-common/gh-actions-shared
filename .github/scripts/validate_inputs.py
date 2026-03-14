@@ -24,6 +24,43 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 GITLAB_GROUP_PATH_RE = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+$")
 
 
+def resolve_gitlab_group_path(payload: Dict[str, Any]) -> str:
+    raw = payload.get("gitlab_group_path")
+    if isinstance(raw, str):
+        value = raw.strip()
+        if value:
+            return value
+
+    mapping_raw = require_secret("GL_MAPPING_JSON")
+    try:
+        mapping = json.loads(mapping_raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("GL_MAPPING_JSON is not valid JSON") from exc
+    if not isinstance(mapping, dict):
+        raise SystemExit("GL_MAPPING_JSON must be a JSON object mapping org to GitLab group path")
+
+    candidates = []
+    org_login = payload.get("org_login")
+    if isinstance(org_login, str):
+        candidates.append(org_login.strip())
+    target_org = os.environ.get("TARGET_ORG", "").strip()
+    if target_org:
+        candidates.append(target_org)
+    target_profile = os.environ.get("TARGET_PROFILE", "").strip()
+    if target_profile:
+        candidates.append(target_profile)
+
+    seen = set()
+    for key in candidates:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        value = mapping.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raise SystemExit("gitlab_group_path is missing and GL_MAPPING_JSON has no mapping for this org")
+
+
 def load_payload() -> Dict[str, Any]:
     input_path = os.environ.get("INPUT_PATH")
     if input_path:
@@ -57,6 +94,7 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
             payload[key] = None
     if "job_type" not in payload:
         payload["job_type"] = "create"
+    payload["gitlab_group_path"] = resolve_gitlab_group_path(payload)
     schema_path = os.environ.get("INPUT_SCHEMA_PATH", config_path("inputs.schema.json"))
     schema = load_json(schema_path, "inputs schema")
     validate(payload, schema)

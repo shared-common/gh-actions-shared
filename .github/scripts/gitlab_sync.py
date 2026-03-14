@@ -68,11 +68,38 @@ def select_sync_sources(input_data: dict, tracked_sources: Sequence[str]) -> Lis
 
 def require_gitlab_group_path(input_data: dict) -> str:
     value = input_data.get("gitlab_group_path")
-    if not isinstance(value, str):
-        raise SystemExit("Missing gitlab_group_path in INPUT_PATH payload")
-    group_path = value.strip()
+    if isinstance(value, str):
+        group_path = value.strip()
+    else:
+        mapping_raw = require_secret("GL_MAPPING_JSON")
+        try:
+            mapping = json.loads(mapping_raw)
+        except json.JSONDecodeError as exc:
+            raise SystemExit("GL_MAPPING_JSON is not valid JSON") from exc
+        if not isinstance(mapping, dict):
+            raise SystemExit("GL_MAPPING_JSON must be a JSON object mapping org to GitLab group path")
+        candidates = []
+        target_org = os.environ.get("TARGET_ORG", "").strip()
+        if target_org:
+            candidates.append(target_org)
+        target_profile = os.environ.get("TARGET_PROFILE", "").strip()
+        if target_profile:
+            candidates.append(target_profile)
+        repo_full_name = input_data.get("repo_full_name")
+        if isinstance(repo_full_name, str) and "/" in repo_full_name:
+            candidates.append(repo_full_name.split("/", 1)[0].strip())
+        group_path = ""
+        seen = set()
+        for key in candidates:
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            mapped = mapping.get(key)
+            if isinstance(mapped, str) and mapped.strip():
+                group_path = mapped.strip()
+                break
     if "/" not in group_path:
-        raise SystemExit("gitlab_group_path must include at least one slash")
+        raise SystemExit("gitlab_group_path must include at least one slash or be resolvable from GL_MAPPING_JSON")
     return group_path
 
 

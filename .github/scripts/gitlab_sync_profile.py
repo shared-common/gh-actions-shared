@@ -6,6 +6,7 @@ from typing import Callable, Sequence
 
 COMMON_BWS_SECRETS = (
     "GL_BASE_URL",
+    "GL_MAPPING_JSON",
     "GIT_BRANCH_PREFIX",
     "GIT_BRANCH_MAIN",
     "GIT_BRANCH_STAGING",

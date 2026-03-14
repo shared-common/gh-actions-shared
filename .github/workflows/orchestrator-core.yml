@@ -35,7 +35,7 @@ name: orchestrator-core
         required: false
         type: string
         default: >-
-          GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,
+          GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,GL_MAPPING_JSON,
           GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,GIT_BRANCH_STAGING,
           GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,GIT_BRANCH_FEATURE
       run-branch-operations:

@@ -39,6 +39,6 @@
       "maxLength": 300
     }
   },
-  "required": ["event_name", "delivery_id", "org_login", "gitlab_group_path", "repo_id", "repo_full_name", "job_type", "action", "ref", "after", "source_repo_full_name"],
+  "required": ["event_name", "delivery_id", "org_login", "repo_id", "repo_full_name", "job_type", "action", "ref", "after", "source_repo_full_name"],
   "additionalProperties": false
 }
