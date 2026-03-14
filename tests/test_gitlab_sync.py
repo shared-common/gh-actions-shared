@@ -150,6 +150,25 @@ class GitlabSyncTests(unittest.TestCase):
 
         self.assertEqual(group_id, 321)
 
+    def test_get_gitlab_group_id_reports_project_path_conflict(self):
+        def fake_request(method, _base_url, path, _token, payload=None, **_kwargs):
+            self.assertIsNone(payload)
+            if method != "GET":
+                self.fail("expected only GET calls")
+            if path == "/groups/derived%2Fgh-xf-checkout":
+                raise gitlab_sync.ApiError(404, '{"message":"404 Group Not Found"}')
+            if path == "/groups?search=gh-xf-checkout&per_page=100&page=1":
+                return []
+            if path == "/projects/derived%2Fgh-xf-checkout":
+                return {"id": 88, "path_with_namespace": "derived/gh-xf-checkout"}
+            self.fail(f"unexpected path: {path}")
+
+        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
+            with self.assertRaises(SystemExit) as exc:
+                gitlab_sync._get_gitlab_group_id("https://gitlab.example", "token", "derived/gh-xf-checkout")
+
+        self.assertEqual(str(exc.exception), "GitLab path exists as a project, not a group: derived/gh-xf-checkout")
+
     def test_protect_branches_updates_force_push_when_existing_branch_disallows_it(self):
         calls = []
 
@@ -171,6 +190,44 @@ class GitlabSyncTests(unittest.TestCase):
         self.assertEqual(changed, ["github/mcr/main"])
         self.assertEqual(calls[1][0], "PATCH")
         self.assertIn("allow_force_push=true", calls[1][1])
+
+    def test_set_default_branch_ignores_forbidden(self):
+        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=gitlab_sync.ApiError(403, "Forbidden")):
+            changed = gitlab_sync._set_default_branch("https://gitlab.example", "token", 123, "mcr/main", "main")
+
+        self.assertFalse(changed)
+
+    def test_protect_branches_skips_forbidden(self):
+        def fake_request(method, _base_url, _path, _token, payload=None, **_kwargs):
+            self.assertIsNotNone(method)
+            self.assertIsNone(payload if method == "GET" else None)
+            if method == "GET":
+                return []
+            raise gitlab_sync.ApiError(403, "Forbidden")
+
+        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
+            changed = gitlab_sync._protect_branches(
+                "https://gitlab.example",
+                "token",
+                123,
+                ["github/mcr/main"],
+                allow_force_push=True,
+            )
+
+        self.assertEqual(changed, [])
+
+    def test_protect_tags_skips_forbidden(self):
+        def fake_request(method, _base_url, _path, _token, payload=None, **_kwargs):
+            self.assertIsNotNone(method)
+            self.assertIsNone(payload if method == "GET" else None)
+            if method == "GET":
+                return []
+            raise gitlab_sync.ApiError(403, "Forbidden")
+
+        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
+            created = gitlab_sync._protect_tags("https://gitlab.example", "token", 123, ["*"])
+
+        self.assertEqual(created, [])
 
     def test_push_branch_retries_with_force_with_lease_when_needed(self):
         run_calls = []

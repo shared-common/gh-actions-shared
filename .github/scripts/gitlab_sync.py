@@ -156,7 +156,10 @@ def _get_gitlab_group_id(base_url: str, token: str, group_path: str) -> int:
             raise
         data = _search_gitlab_group(base_url, token, group_path)
         if data is None:
-            raise SystemExit(f"GitLab group not found: {group_path}") from exc
+            project = _get_gitlab_project(base_url, token, group_path)
+            if project:
+                raise SystemExit(f"GitLab path exists as a project, not a group: {group_path}") from exc
+            raise SystemExit(f"GitLab group not found or not accessible: {group_path}") from exc
     if not isinstance(data, dict) or not data.get("id"):
         raise SystemExit(f"Unable to resolve GitLab group id for {group_path}")
     return int(data["id"])
@@ -450,12 +453,22 @@ def _should_force_retry(stderr: str) -> bool:
 def _set_default_branch(base_url: str, token: str, project_id: int, branch: str, current: Optional[str]) -> bool:
     if current == branch:
         return False
-    _gitlab_request("PUT", base_url, f"/projects/{project_id}", token, {"default_branch": branch})
+    try:
+        _gitlab_request("PUT", base_url, f"/projects/{project_id}", token, {"default_branch": branch})
+    except ApiError as exc:
+        if exc.status == 403:
+            return False
+        raise
     return True
 
 
 def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequence[str], *, allow_force_push: bool) -> List[str]:
-    existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_branches", token)
+    try:
+        existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_branches", token)
+    except ApiError as exc:
+        if exc.status == 403:
+            return []
+        raise
     existing_map = {
         str(item.get("name")): item
         for item in existing
@@ -469,12 +482,17 @@ def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequ
             current_allow_force_push = bool(branch_entry.get("allow_force_push"))
             if current_allow_force_push == allow_force_push:
                 continue
-            _gitlab_request(
-                "PATCH",
-                base_url,
-                f"/projects/{project_id}/protected_branches/{encoded_branch}?allow_force_push={'true' if allow_force_push else 'false'}",
-                token,
-            )
+            try:
+                _gitlab_request(
+                    "PATCH",
+                    base_url,
+                    f"/projects/{project_id}/protected_branches/{encoded_branch}?allow_force_push={'true' if allow_force_push else 'false'}",
+                    token,
+                )
+            except ApiError as exc:
+                if exc.status == 403:
+                    continue
+                raise
             changed.append(branch)
             continue
         payload = {
@@ -487,7 +505,7 @@ def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequ
         try:
             _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_branches", token, payload)
         except ApiError as exc:
-            if exc.status not in {409, 422}:
+            if exc.status not in {403, 409, 422}:
                 raise
         else:
             changed.append(branch)
@@ -495,7 +513,12 @@ def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequ
 
 
 def _protect_tags(base_url: str, token: str, project_id: int, tags: Sequence[str]) -> List[str]:
-    existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_tags", token)
+    try:
+        existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_tags", token)
+    except ApiError as exc:
+        if exc.status == 403:
+            return []
+        raise
     existing_names = {
         item.get("name")
         for item in existing
@@ -509,7 +532,7 @@ def _protect_tags(base_url: str, token: str, project_id: int, tags: Sequence[str
         try:
             _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_tags", token, payload)
         except ApiError as exc:
-            if exc.status not in {409, 422}:
+            if exc.status not in {403, 409, 422}:
                 raise
         else:
             created.append(tag)
