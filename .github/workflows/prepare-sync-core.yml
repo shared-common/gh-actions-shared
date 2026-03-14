@@ -178,7 +178,7 @@ jobs:
           {
             printf 'validated_payload<<%s\n' "$delimiter"
             cat validated.json
-            printf '%s\n' "$delimiter"
+            printf '\n%s\n' "$delimiter"
           } >> "$GITHUB_OUTPUT"
 
       - name: Mint installation token
