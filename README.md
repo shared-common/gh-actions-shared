@@ -7,7 +7,7 @@ repos**; this repository stays org‑agnostic.
 ## What lives here
 - Reusable workflows (`.github/workflows/*-core.yml`)
 - Composite actions (`.github/actions/*`)
-- Python scripts for validation, branch orchestration, discovery, and summary
+- Python scripts for validation, branch orchestration, GitLab sync, discovery, and summary
 - JSON configs/schemas used by the workflows
 
 ## Key guarantees
@@ -16,12 +16,14 @@ repos**; this repository stays org‑agnostic.
 - **Event validation**: workflow_dispatch events are checked against
   `configs/event-allowlist.json` before work begins.
 - **Branch policy**: enforced from `configs/branch-policy.json`.
+- **GitLab sync**: project creation, branch mirroring, and protection are handled in shared reusable workflows.
 - **Latest Python only**: workflows pin `actions/setup-python` (v6.1.0) to Python 3.14.2.
 
 ## Wrapper repo contract
 Wrapper repositories must:
 - Call only the reusable workflows in this repo.
 - Rely on Worker cron for fork drift detection (no polling repos).
+- Call the shared GitLab sync workflow after branch/polling jobs and via `sync.yml` for tracked branch pushes.
 - Pass `event-context`, `event-name`, and `expected-event-action`.
 - Pass `target-org` to enforce org allowlists.
 - Provide BWS secrets via repo secrets (no inline secrets).

@@ -92,6 +92,21 @@ def get_upstream_sha(
     return get_branch_sha_public(upstream_owner, upstream_repo, upstream_branch)
 
 
+def _load_installation_token() -> str | None:
+    token_path = os.environ.get("GH_INSTALL_TOKEN_FILE", "").strip()
+    if not token_path:
+        return None
+    try:
+        token = Path(token_path).read_text(encoding="utf-8").strip()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Missing GH_INSTALL_TOKEN_FILE: {token_path}") from exc
+    except OSError as exc:
+        raise SystemExit(f"Unable to read GH_INSTALL_TOKEN_FILE: {token_path}") from exc
+    if not token:
+        raise SystemExit("GH_INSTALL_TOKEN_FILE is empty")
+    return token
+
+
 def main() -> int:
     input_data = load_input()
     repo_full = input_data.get("repo_full_name")
@@ -111,7 +126,7 @@ def main() -> int:
     policy_path = os.environ.get("BRANCH_POLICY_PATH")
     policy: BranchPolicy = load_branch_policy(policy_path)
 
-    token = get_installation_token_for_org(app_id, pem_path, install_json, org)
+    token = _load_installation_token() or get_installation_token_for_org(app_id, pem_path, install_json, org)
     upstream_sha = get_upstream_sha(input_data, org, repo, token, app_id, pem_path, install_json)
     base_sha = upstream_sha
     main_spec = policy.by_env.get("GIT_BRANCH_MAIN")

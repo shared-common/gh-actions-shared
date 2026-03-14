@@ -1,10 +1,10 @@
 ---
-name: summary-core
+name: prepare-sync-core
 
 "on":
   workflow_call:
     inputs:
-      summary-json:
+      event-payload:
         required: true
         type: string
       event-context:
@@ -34,7 +34,14 @@ name: summary-core
       bws-secrets:
         required: false
         type: string
-        default: "GH_INSTALL_JSON"
+        default: "GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON"
+    outputs:
+      validated-payload:
+        description: "Validated payload JSON"
+        value: ${{ jobs.prepare.outputs.validated-payload }}
+      github-install-token:
+        description: "Ephemeral GitHub installation token for the target org"
+        value: ${{ jobs.prepare.outputs.github-install-token }}
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
@@ -44,9 +51,12 @@ name: summary-core
 permissions: {}
 
 jobs:
-  summary:
+  prepare:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      validated-payload: ${{ steps.capture_payload.outputs.validated_payload }}
+      github-install-token: ${{ steps.issue_token.outputs.github_install_token }}
     permissions:
       contents: read
     steps:
@@ -56,7 +66,7 @@ jobs:
           SHARED_REPO: ${{ inputs.shared-repo }}
           SHARED_REF: ${{ inputs.shared-ref }}
           EVENT_CONTEXT: ${{ inputs.event-context }}
-          SUMMARY_JSON: ${{ inputs.summary-json }}
+          EVENT_PAYLOAD: ${{ inputs.event-payload }}
         run: |
           set -euo pipefail
           allowed_repo="shared-common/gh-actions-shared"
@@ -84,11 +94,11 @@ jobs:
             printf '%s\n' "event-context too large: ${size} bytes" >&2
             exit 1
           fi
-          summary_size="$(
-            printf '%s' "$SUMMARY_JSON" | wc -c | tr -d '[:space:]'
+          payload_size="$(
+            printf '%s' "$EVENT_PAYLOAD" | wc -c | tr -d '[:space:]'
           )"
-          if [ "${summary_size}" -gt "${max_bytes}" ]; then
-            printf '%s\n' "summary-json too large: ${summary_size} bytes" >&2
+          if [ "${payload_size}" -gt "${max_bytes}" ]; then
+            printf '%s\n' "event-payload too large: ${payload_size} bytes" >&2
             exit 1
           fi
 
@@ -135,29 +145,61 @@ jobs:
           set -euo pipefail
           python3 shared/.github/scripts/validate_event.py
 
-      - name: Write summary payload
+      - name: Write payload
         shell: bash
         run: |
           set -euo pipefail
-          cat <<'JSON' > summary.json
-          ${{ inputs.summary-json }}
+          cat <<'JSON' > payload.json
+          ${{ inputs.event-payload }}
           JSON
 
-      - name: Render summary
+      - name: Validate inputs
+        shell: bash
+        env:
+          TARGET_ORG: ${{ inputs.target-org }}
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+        run: |
+          set -euo pipefail
+          OUTPUT_PATH=validated.json INPUT_PATH=payload.json \
+            python3 shared/.github/scripts/validate_inputs.py
+
+      - name: Capture validated payload
+        id: capture_payload
         shell: bash
         run: |
           set -euo pipefail
-          INPUT_PATH=summary.json OUTPUT_PATH=summary.md \
-            python3 shared/.github/scripts/summary_render.py
+          {
+            echo 'validated_payload<<EOF'
+            cat validated.json
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Publish summary
-        uses: ./shared/.github/actions/job-summary
-        with:
-          summary-path: summary.md
+      - name: Mint installation token
+        id: issue_token
+        shell: bash
+        env:
+          INPUT_PATH: validated.json
+          OUTPUT_PATH: gh_install_token.txt
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/issue_installation_token.py
+          token="$(cat gh_install_token.txt)"
+          echo "::add-mask::$token"
+          {
+            echo 'github_install_token<<EOF'
+            printf '%s\n' "$token"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Cleanup secrets
         if: always()
         shell: bash
         run: |
           set -euo pipefail
+          rm -f gh_install_token.txt
           rm -rf shared/.secrets

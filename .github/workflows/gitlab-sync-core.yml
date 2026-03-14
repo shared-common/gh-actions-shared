@@ -1,0 +1,183 @@
+---
+name: gitlab-sync-core
+
+"on":
+  workflow_call:
+    inputs:
+      validated-payload:
+        required: true
+        type: string
+      target-org:
+        required: true
+        type: string
+      shared-repo:
+        required: true
+        type: string
+      shared-ref:
+        required: true
+        type: string
+      bws-version:
+        required: true
+        type: string
+      bws-sha256:
+        required: true
+        type: string
+      bws-secrets:
+        required: false
+        type: string
+        default: >-
+          GH_ORG_UPSTREAM,GH_ORG_XF_MAIN,GH_ORG_XF_SECOPS,GH_ORG_XF_CHECKOUT,
+          GL_BASE_URL,GL_GROUP_TOP_UPSTREAM,GL_GROUP_SUB_CANONICAL,
+          GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_MAIN,GL_GROUP_SUB_XF_SECOPS,
+          GL_GROUP_SUB_XF_CHECKOUT,GL_BRIDGE_FORK_USER_DERIVED,
+          GL_PAT_FORK_DERIVED_SVC,GL_BRIDGE_FORK_USER_SEEDBED,
+          GL_PAT_FORK_SEEDBED_SVC,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,
+          GIT_BRANCH_STAGING,GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,
+          GIT_BRANCH_FEATURE
+    secrets:
+      BWS_ACCESS_TOKEN:
+        required: true
+      BWS_PROJECT_ID:
+        required: true
+      GH_INSTALL_TOKEN:
+        required: true
+
+permissions: {}
+
+jobs:
+  gitlab_sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Validate shared inputs
+        shell: bash
+        env:
+          SHARED_REPO: ${{ inputs.shared-repo }}
+          SHARED_REF: ${{ inputs.shared-ref }}
+          VALIDATED_PAYLOAD: ${{ inputs.validated-payload }}
+        run: |
+          set -euo pipefail
+          allowed_repo="shared-common/gh-actions-shared"
+          allowed_refs="v0.0.19 v0.0.20"
+          if [ "$SHARED_REPO" != "$allowed_repo" ]; then
+            printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
+            exit 1
+          fi
+          allowed=false
+          for ref in $allowed_refs; do
+            if [ "$SHARED_REF" = "$ref" ]; then
+              allowed=true
+              break
+            fi
+          done
+          if [ "$allowed" != "true" ]; then
+            printf '%s\n' "shared-ref not allowlisted: $SHARED_REF" >&2
+            exit 1
+          fi
+          max_bytes=262144
+          payload_size="$(
+            printf '%s' "$VALIDATED_PAYLOAD" | wc -c | tr -d '[:space:]'
+          )"
+          if [ "${payload_size}" -gt "${max_bytes}" ]; then
+            printf '%s\n' "validated-payload too large: ${payload_size} bytes" >&2
+            exit 1
+          fi
+
+      - name: Checkout shared workflows
+        # actions/checkout v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: ${{ inputs.shared-repo }}
+          ref: ${{ inputs.shared-ref }}
+          path: shared
+
+      - name: Setup Python
+        # actions/setup-python v6.1.0
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: "3.14.2"
+
+      - name: Fetch secrets from BWS
+        uses: ./shared/.github/actions/bws-fetch
+        with:
+          access-token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          project-id: ${{ secrets.BWS_PROJECT_ID }}
+          bws-version: ${{ inputs.bws-version }}
+          bws-sha256: ${{ inputs.bws-sha256 }}
+          secrets: ${{ inputs.bws-secrets }}
+          output-dir: shared/.secrets
+
+      - name: Write validated payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat <<'JSON' > validated.json
+          ${{ inputs.validated-payload }}
+          JSON
+
+      - name: Materialize GitHub installation token
+        shell: bash
+        env:
+          GH_INSTALL_TOKEN: ${{ secrets.GH_INSTALL_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "${RUNNER_TEMP}/gh-install-token.XXXXXX")"
+          printf '%s' "$GH_INSTALL_TOKEN" > "$token_file"
+          chmod 600 "$token_file"
+          echo "::add-mask::$GH_INSTALL_TOKEN"
+          echo "GH_INSTALL_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+
+      - name: GitLab sync
+        shell: bash
+        env:
+          INPUT_PATH: validated.json
+          OUTPUT_PATH: summary.json
+          TARGET_ORG: ${{ inputs.target-org }}
+          GH_ORG_UPSTREAM_FILE: ${{ env.GH_ORG_UPSTREAM_FILE }}
+          GH_ORG_XF_MAIN_FILE: ${{ env.GH_ORG_XF_MAIN_FILE }}
+          GH_ORG_XF_SECOPS_FILE: ${{ env.GH_ORG_XF_SECOPS_FILE }}
+          GH_ORG_XF_CHECKOUT_FILE: ${{ env.GH_ORG_XF_CHECKOUT_FILE }}
+          GH_INSTALL_TOKEN_FILE: ${{ env.GH_INSTALL_TOKEN_FILE }}
+          GL_BASE_URL_FILE: ${{ env.GL_BASE_URL_FILE }}
+          GL_GROUP_TOP_UPSTREAM_FILE: ${{ env.GL_GROUP_TOP_UPSTREAM_FILE }}
+          GL_GROUP_SUB_CANONICAL_FILE: ${{ env.GL_GROUP_SUB_CANONICAL_FILE }}
+          GL_GROUP_TOP_DIVERGE_FILE: ${{ env.GL_GROUP_TOP_DIVERGE_FILE }}
+          GL_GROUP_SUB_XF_MAIN_FILE: ${{ env.GL_GROUP_SUB_XF_MAIN_FILE }}
+          GL_GROUP_SUB_XF_SECOPS_FILE: ${{ env.GL_GROUP_SUB_XF_SECOPS_FILE }}
+          GL_GROUP_SUB_XF_CHECKOUT_FILE: ${{ env.GL_GROUP_SUB_XF_CHECKOUT_FILE }}
+          GL_BRIDGE_FORK_USER_DERIVED_FILE: ${{ env.GL_BRIDGE_FORK_USER_DERIVED_FILE }}
+          GL_PAT_FORK_DERIVED_SVC_FILE: ${{ env.GL_PAT_FORK_DERIVED_SVC_FILE }}
+          GL_BRIDGE_FORK_USER_SEEDBED_FILE: ${{ env.GL_BRIDGE_FORK_USER_SEEDBED_FILE }}
+          GL_PAT_FORK_SEEDBED_SVC_FILE: ${{ env.GL_PAT_FORK_SEEDBED_SVC_FILE }}
+          GIT_BRANCH_PREFIX_FILE: ${{ env.GIT_BRANCH_PREFIX_FILE }}
+          GIT_BRANCH_MAIN_FILE: ${{ env.GIT_BRANCH_MAIN_FILE }}
+          GIT_BRANCH_STAGING_FILE: ${{ env.GIT_BRANCH_STAGING_FILE }}
+          GIT_BRANCH_RELEASE_FILE: ${{ env.GIT_BRANCH_RELEASE_FILE }}
+          GIT_BRANCH_SNAPSHOT_FILE: ${{ env.GIT_BRANCH_SNAPSHOT_FILE }}
+          GIT_BRANCH_FEATURE_FILE: ${{ env.GIT_BRANCH_FEATURE_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/gitlab_sync.py
+
+      - name: Render summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_PATH=summary.json OUTPUT_PATH=summary.md \
+            python3 shared/.github/scripts/summary_render.py
+
+      - name: Publish summary
+        uses: ./shared/.github/actions/job-summary
+        with:
+          summary-path: summary.md
+
+      - name: Cleanup secrets
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "${GH_INSTALL_TOKEN_FILE:-}"
+          rm -rf shared/.secrets

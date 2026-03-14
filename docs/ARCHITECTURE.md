@@ -8,6 +8,7 @@ lives here**.
 ## Components
 - **Reusable workflows** (`*-core.yml`):
   - `orchestrator-core`: branch creation/update
+  - `gitlab-sync-core`: GitLab project/bootstrap/mirror/protection
   - `discover-core`: enumerate org repos for discovery runs
   - `summary-core`: render summaries for job outputs
 - **Composite actions**: BWS secret fetch, JSON validation, dispatch helper, job summary.
@@ -18,11 +19,12 @@ lives here**.
 1. GitHub App webhook → Cloudflare Worker
 2. Worker sends `workflow_dispatch` to **private** wrapper repo
 3. Worker cron detects fork drift and dispatches `polling.yml` as needed
-4. Wrapper invokes shared workflow with event context + payload
-5. Shared workflow validates event, then performs the job
+4. Worker dispatches `sync.yml` for tracked `mcr/main` / `mcr/staging` push updates
+5. Wrapper invokes shared workflows with event context + payload
+6. Shared workflows validate the event, run branch operations, then run GitLab sync
 
 Wrapper mutation workflows serialize by `repo_full_name` so a single repo cannot run
-overlapping `repository`/`fork`/`orchestrator`/`polling` sync jobs.
+overlapping `repository`/`fork`/`orchestrator`/`polling`/`sync` jobs.
 
 ## Security boundaries
 - Secrets are fetched via BWS and written to `*_FILE` paths only.

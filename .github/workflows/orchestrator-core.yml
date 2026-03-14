@@ -38,6 +38,17 @@ name: orchestrator-core
           GH_ORG_SHARED_APP_ID,GH_ORG_SHARED_APP_PEM,GH_INSTALL_JSON,
           GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,GIT_BRANCH_STAGING,
           GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,GIT_BRANCH_FEATURE
+      run-branch-operations:
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      validated-payload:
+        description: "Validated payload JSON"
+        value: ${{ jobs.orchestrate.outputs.validated-payload }}
+      github-install-token:
+        description: "Ephemeral GitHub installation token for the target org"
+        value: ${{ jobs.orchestrate.outputs.github-install-token }}
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
@@ -50,6 +61,9 @@ jobs:
   orchestrate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      validated-payload: ${{ steps.capture_payload.outputs.validated_payload }}
+      github-install-token: ${{ steps.issue_token.outputs.github_install_token }}
     permissions:
       contents: read
     steps:
@@ -63,7 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           allowed_repo="shared-common/gh-actions-shared"
-          allowed_refs="v0.0.19"
+          allowed_refs="v0.0.19 v0.0.20"
           if [ "$SHARED_REPO" != "$allowed_repo" ]; then
             printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
             exit 1
@@ -155,11 +169,44 @@ jobs:
           OUTPUT_PATH=validated.json INPUT_PATH=payload.json \
             python3 shared/.github/scripts/validate_inputs.py
 
+      - name: Capture validated payload
+        id: capture_payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'validated_payload<<EOF'
+            cat validated.json
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mint installation token
+        id: issue_token
+        shell: bash
+        env:
+          INPUT_PATH: validated.json
+          OUTPUT_PATH: gh_install_token.txt
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
+        run: |
+          set -euo pipefail
+          python3 shared/.github/scripts/issue_installation_token.py
+          token="$(cat gh_install_token.txt)"
+          echo "::add-mask::$token"
+          {
+            echo 'github_install_token<<EOF'
+            printf '%s\n' "$token"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Branch operations
+        if: ${{ inputs.run-branch-operations }}
         shell: bash
         env:
           INPUT_PATH: validated.json
           OUTPUT_PATH: summary.json
+          GH_INSTALL_TOKEN_FILE: gh_install_token.txt
           GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
           GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
           GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
@@ -172,6 +219,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 shared/.github/scripts/branch_ops.py
+
+      - name: Seed summary payload when branch ops are skipped
+        if: ${{ !inputs.run-branch-operations }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp validated.json summary.json
 
       - name: Render summary
         shell: bash
@@ -190,4 +244,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f gh_install_token.txt
           rm -rf shared/.secrets
