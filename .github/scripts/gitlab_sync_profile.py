@@ -74,15 +74,10 @@ def required_bws_secrets(profile: str, *, include_github_app: bool = False, mode
     if mode == "create":
         ordered: list[str] = list(COMMON_BWS_SECRETS)
     elif mode == "sync":
-        ordered = [
-            "GL_BASE_URL",
-            "GL_MAPPING_JSON",
-            "GIT_BRANCH_PREFIX",
-            "GIT_BRANCH_MAIN",
-            "GIT_BRANCH_STAGING",
-            cfg.group_top_secret,
-            cfg.group_sub_secret,
-        ]
+        ordered = list(COMMON_BWS_SECRETS)
+        for name in (cfg.group_top_secret, cfg.group_sub_secret):
+            if name not in ordered:
+                ordered.append(name)
     else:
         raise SystemExit(f"Unsupported GitLab sync secret mode: {mode}")
     for name in (cfg.git_username_secret, cfg.api_token_secret):
