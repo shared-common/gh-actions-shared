@@ -108,20 +108,7 @@ jobs:
           override_clean="$(printf '%s' "${BWS_SECRETS_OVERRIDE}" | tr -d '[:space:]')"
           if [ -n "${override_clean}" ]; then
             secrets="$(
-              python3 - "${default_secrets}" "${override_clean}" <<'PY'
-              import sys
-
-              ordered = []
-              seen = set()
-              for raw in sys.argv[1:]:
-                  for item in raw.split(","):
-                      item = item.strip()
-                      if not item or item in seen:
-                          continue
-                      ordered.append(item)
-                      seen.add(item)
-              print(",".join(ordered))
-              PY
+              python3 -c 'import sys; ordered = []; seen = set(); [ordered.append(item) or seen.add(item) for raw in sys.argv[1:] for item in [part.strip() for part in raw.split(",")] if item and item not in seen]; print(",".join(ordered))' "${default_secrets}" "${override_clean}"
             )"
             printf 'secrets=%s\n' "${secrets}" >> "$GITHUB_OUTPUT"
             exit 0
