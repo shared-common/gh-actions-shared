@@ -129,7 +129,6 @@ jobs:
           OUTPUT_PATH: summary.json
           GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
           GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
-          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
         run: |
           set -euo pipefail
           python3 shared/.github/scripts/gitlab_org_sync.py

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Dict, List
 
-from _common import config_path, get_installation_token_for_org, list_org_repos, require_env, require_secret
+from _common import config_path, get_installation_id_for_org, get_installation_token, list_org_repos, require_env, require_secret
 from gitlab_sync_profile import resolve_profile_group_path
 from gitlab_sync import run_sync
 from repo_filters import apply_filters
@@ -25,11 +25,11 @@ def main() -> int:
     target_profile = require_env("TARGET_PROFILE")
     app_id = require_secret("GH_ORG_SHARED_APP_ID")
     pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
-    install_json = require_secret("GH_INSTALL_JSON")
     filters_path = os.environ.get("REPO_FILTERS_PATH", config_path("repo-filters.json"))
     gitlab_group_path = resolve_profile_group_path(target_profile, require_secret)
 
-    token = get_installation_token_for_org(app_id, pem_path, install_json, target_org)
+    installation_id = get_installation_id_for_org(app_id, pem_path, target_org)
+    token = get_installation_token(app_id, pem_path, installation_id)
     repos = [repo for repo in list_org_repos(token, target_org) if not repo.get("archived")]
     if filters_path:
         repos = apply_filters(repos, filters_path)
@@ -73,6 +73,9 @@ def main() -> int:
             )
         except SystemExit as exc:
             message = str(exc) or "sync_failed"
+            if message.startswith("GitLab project missing for sync:"):
+                aggregate["skipped"].append(f"{repo_full_name}:project_missing")
+                continue
             errors.append(f"{repo_full_name}:{message}")
             continue
         except Exception as exc:  # pragma: no cover

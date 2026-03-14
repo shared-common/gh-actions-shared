@@ -229,6 +229,15 @@ def get_installation_token(app_id: str, pem_path: str, installation_id: int) -> 
     return str(token)
 
 
+def get_installation_id_for_org(app_id: str, pem_path: str, org: str) -> int:
+    jwt = create_app_jwt(app_id, pem_path)
+    data = github_request(jwt, "GET", f"/orgs/{org}/installation")
+    install_id = data.get("id") if isinstance(data, dict) else None
+    if not isinstance(install_id, int) or install_id <= 0:
+        raise SystemExit(f"Failed to resolve installation id for org: {org}")
+    return install_id
+
+
 def parse_installations(value: str) -> Dict[str, int]:
     try:
         data = json.loads(value)
