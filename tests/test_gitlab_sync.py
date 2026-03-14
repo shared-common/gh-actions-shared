@@ -178,66 +178,6 @@ class GitlabSyncTests(unittest.TestCase):
                 value = gitlab_sync.require_gitlab_group_path({"repo_full_name": "xf-main/demo"})
         self.assertEqual(value, "derived/gh-xf-main")
 
-    def test_protect_branches_updates_force_push_when_existing_branch_disallows_it(self):
-        calls = []
-
-        def fake_request(method, _base_url, path, _token, payload=None, **_kwargs):
-            calls.append((method, path, payload))
-            if method == "GET":
-                return [{"name": "github/mcr/main", "allow_force_push": False}]
-            return {"name": "github/mcr/main", "allow_force_push": True}
-
-        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
-            changed = gitlab_sync._protect_branches(
-                "https://gitlab.example",
-                "token",
-                123,
-                ["github/mcr/main"],
-                allow_force_push=True,
-            )
-
-        self.assertEqual(changed, ["github/mcr/main"])
-        self.assertEqual(calls[1][0], "PATCH")
-        self.assertIn("allow_force_push=true", calls[1][1])
-
-    def test_set_default_branch_ignores_forbidden(self):
-        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=gitlab_sync.ApiError(403, "Forbidden")):
-            changed = gitlab_sync._set_default_branch("https://gitlab.example", "token", 123, "mcr/main", "main")
-
-        self.assertFalse(changed)
-
-    def test_protect_branches_skips_forbidden(self):
-        def fake_request(method, _base_url, _path, _token, payload=None, **_kwargs):
-            self.assertIsNotNone(method)
-            self.assertIsNone(payload if method == "GET" else None)
-            if method == "GET":
-                return []
-            raise gitlab_sync.ApiError(403, "Forbidden")
-
-        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
-            changed = gitlab_sync._protect_branches(
-                "https://gitlab.example",
-                "token",
-                123,
-                ["github/mcr/main"],
-                allow_force_push=True,
-            )
-
-        self.assertEqual(changed, [])
-
-    def test_protect_tags_skips_forbidden(self):
-        def fake_request(method, _base_url, _path, _token, payload=None, **_kwargs):
-            self.assertIsNotNone(method)
-            self.assertIsNone(payload if method == "GET" else None)
-            if method == "GET":
-                return []
-            raise gitlab_sync.ApiError(403, "Forbidden")
-
-        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
-            created = gitlab_sync._protect_tags("https://gitlab.example", "token", 123, ["*"])
-
-        self.assertEqual(created, [])
-
     def test_push_branch_retries_with_force_with_lease_when_needed(self):
         run_calls = []
 

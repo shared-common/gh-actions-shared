@@ -477,95 +477,6 @@ def _should_force_retry(stderr: str) -> bool:
     return any(pattern in lowered for pattern in patterns)
 
 
-def _set_default_branch(base_url: str, token: str, project_id: int, branch: str, current: Optional[str]) -> bool:
-    if current == branch:
-        return False
-    try:
-        _gitlab_request("PUT", base_url, f"/projects/{project_id}", token, {"default_branch": branch})
-    except ApiError as exc:
-        if exc.status == 403:
-            return False
-        raise
-    return True
-
-
-def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequence[str], *, allow_force_push: bool) -> List[str]:
-    try:
-        existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_branches", token)
-    except ApiError as exc:
-        if exc.status == 403:
-            return []
-        raise
-    existing_map = {
-        str(item.get("name")): item
-        for item in existing
-        if isinstance(existing, list) and isinstance(item, dict) and isinstance(item.get("name"), str)
-    } if isinstance(existing, list) else {}
-    changed: List[str] = []
-    for branch in branches:
-        branch_entry = existing_map.get(branch)
-        encoded_branch = urllib.parse.quote(branch, safe="")
-        if branch_entry:
-            current_allow_force_push = bool(branch_entry.get("allow_force_push"))
-            if current_allow_force_push == allow_force_push:
-                continue
-            try:
-                _gitlab_request(
-                    "PATCH",
-                    base_url,
-                    f"/projects/{project_id}/protected_branches/{encoded_branch}?allow_force_push={'true' if allow_force_push else 'false'}",
-                    token,
-                )
-            except ApiError as exc:
-                if exc.status == 403:
-                    continue
-                raise
-            changed.append(branch)
-            continue
-        payload = {
-            "name": branch,
-            "push_access_level": 40,
-            "merge_access_level": 40,
-            "unprotect_access_level": 40,
-            "allow_force_push": allow_force_push,
-        }
-        try:
-            _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_branches", token, payload)
-        except ApiError as exc:
-            if exc.status not in {403, 409, 422}:
-                raise
-        else:
-            changed.append(branch)
-    return changed
-
-
-def _protect_tags(base_url: str, token: str, project_id: int, tags: Sequence[str]) -> List[str]:
-    try:
-        existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_tags", token)
-    except ApiError as exc:
-        if exc.status == 403:
-            return []
-        raise
-    existing_names = {
-        item.get("name")
-        for item in existing
-        if isinstance(existing, list) and isinstance(item, dict)
-    } if isinstance(existing, list) else set()
-    created: List[str] = []
-    for tag in tags:
-        if tag in existing_names:
-            continue
-        payload = {"name": tag, "create_access_level": 40}
-        try:
-            _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_tags", token, payload)
-        except ApiError as exc:
-            if exc.status not in {403, 409, 422}:
-                raise
-        else:
-            created.append(tag)
-    return created
-
-
 def main() -> int:
     input_data = load_input()
     repo_full_name = input_data.get("repo_full_name")
@@ -579,8 +490,6 @@ def main() -> int:
     tracked_updates = build_tracked_branches(policy)
     tracked_sources = list(tracked_updates.values())
     tracked_targets = list(tracked_updates.keys())
-    main_branch = _require_branch(policy, "GIT_BRANCH_MAIN")
-
     target_org = os.environ.get("TARGET_ORG", "").strip()
     if not target_org:
         raise SystemExit("Missing TARGET_ORG")
@@ -687,21 +596,6 @@ def main() -> int:
                 results["created"].append(target_branch)
             else:
                 results["updated"].append(target_branch)
-
-    current_default = project.get("default_branch") if isinstance(project, dict) else None
-    if _set_default_branch(target.base_url, target.api_token, int(project_id), main_branch, current_default):
-        results["updated"].append(f"default:{main_branch}")
-
-    protected = _protect_branches(
-        target.base_url,
-        target.api_token,
-        int(project_id),
-        tracked_targets,
-        allow_force_push=True,
-    )
-    results["created"].extend([f"protected:{branch}" for branch in protected])
-    protected_tags = _protect_tags(target.base_url, target.api_token, int(project_id), ["*"])
-    results["created"].extend([f"protected-tag:{tag}" for tag in protected_tags])
 
     payload = {
         "repo": repo_full_name,
