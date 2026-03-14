@@ -85,7 +85,7 @@ class GitlabSyncTests(unittest.TestCase):
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
-                "GL_GROUP_TOP_DERIVED",
+                "GL_GROUP_TOP_DIVERGE",
                 "GL_GROUP_SUB_XF_MAIN",
                 "GL_BRIDGE_FORK_USER_DERIVED",
                 "GL_PAT_FORK_DERIVED_SVC",
@@ -113,7 +113,7 @@ class GitlabSyncTests(unittest.TestCase):
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
-                "GL_GROUP_TOP_DERIVED",
+                "GL_GROUP_TOP_DIVERGE",
                 "GL_GROUP_SUB_XF_MAIN",
                 "GL_BRIDGE_FORK_USER_DERIVED",
                 "GL_PAT_FORK_DERIVED_SVC",
@@ -124,7 +124,7 @@ class GitlabSyncTests(unittest.TestCase):
 
     def test_resolve_profile_group_path(self):
         values = {
-            "GL_GROUP_TOP_DERIVED": "derived",
+            "GL_GROUP_TOP_DIVERGE": "derived",
             "GL_GROUP_SUB_XF_SECOPS": "secops",
         }
         self.assertEqual(

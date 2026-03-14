@@ -67,15 +67,13 @@ def main() -> int:
             payload = run_sync(
                 input_data,
                 gh_install_token=token,
-                allow_project_create=False,
+                allow_project_create=True,
                 protect_tracked_branches=True,
                 bootstrap_required_branches=False,
+                skip_missing_source_branches=True,
             )
         except SystemExit as exc:
             message = str(exc) or "sync_failed"
-            if message.startswith("GitLab project missing for sync:"):
-                aggregate["skipped"].append(f"{repo_full_name}:project_missing")
-                continue
             errors.append(f"{repo_full_name}:{message}")
             continue
         except Exception as exc:  # pragma: no cover

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from _common import ApiError, get_branch_sha, require_secret, validate_repo_full_name
+from _common import ApiError, branch_exists, get_branch_sha, require_secret, validate_repo_full_name
 from branch_policy import BranchPolicy, load_branch_policy
 from gitlab_sync_profile import resolve_profile_values
 
@@ -552,6 +552,7 @@ def run_sync(
     allow_project_create: bool = True,
     protect_tracked_branches: bool = True,
     bootstrap_required_branches: bool = True,
+    skip_missing_source_branches: bool = False,
 ) -> dict:
     repo_full_name = input_data.get("repo_full_name")
     org, repo_name = validate_repo_full_name(repo_full_name)
@@ -632,6 +633,9 @@ def run_sync(
                 continue
             if _branch_exists(gitlab_url, target_branch, secrets=secrets):
                 continue
+            if skip_missing_source_branches and not branch_exists(gh_install_token, org, repo_name, source_branch):
+                results["skipped"].append(f"{target_branch}:source_missing")
+                continue
             _fetch_branch(repo_path, github_url, source_branch, fetched, remote_name="github", secrets=secrets)
             _push_branch(
                 repo_path,
@@ -659,6 +663,9 @@ def run_sync(
             target_branch = f"github/{source_branch}"
             gh_sha = ref_sha_cache.get(source_branch)
             if gh_sha is None:
+                if skip_missing_source_branches and not branch_exists(gh_install_token, org, repo_name, source_branch):
+                    results["skipped"].append(f"{target_branch}:source_missing")
+                    continue
                 gh_sha = _normalize_sha(get_branch_sha(gh_install_token, org, repo_name, source_branch))
                 ref_sha_cache[source_branch] = gh_sha
             gl_sha = _normalize_sha(_get_gitlab_branch_sha(target.base_url, target.api_token, int(project_id), target_branch))
