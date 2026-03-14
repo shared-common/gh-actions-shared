@@ -11,6 +11,30 @@ import validate_inputs  # noqa: E402
 
 
 class ValidateInputsTests(unittest.TestCase):
+    def test_polling_accepts_worker_generated_inventory_delivery_id(self):
+        payload = {
+            "event_name": "polling",
+            "delivery_id": "inventory-1773473445000",
+            "org_login": "xf-main",
+            "repo_id": 77,
+            "repo_full_name": "xf-main/drifted-fork",
+            "action": "polling",
+            "ref": None,
+            "after": None,
+            "source_repo_full_name": "openai/openai-dotnet",
+            "job_type": "polling",
+            "event_id": "inventory-1773473445000",
+            "repo_default_branch": "main",
+            "repo_is_fork": True,
+            "repo_parent_full_name": "openai/openai-dotnet",
+            "repo_parent_default_branch": "main",
+        }
+
+        validated, org = validate_inputs.validate_payload(payload)
+
+        self.assertEqual(org, "xf-main")
+        self.assertEqual(validated["delivery_id"], "inventory-1773473445000")
+
     def test_polling_fork_recovers_missing_parent_branch_from_repo_api(self):
         payload = {
             "event_name": "polling",

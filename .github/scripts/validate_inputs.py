@@ -19,6 +19,7 @@ ALLOWED_JOB_TYPES = {"create", "polling", "sync"}
 EVENT_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 ORG_RE = re.compile(r"^[A-Za-z0-9-]+$")
 UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+WORKER_DELIVERY_RE = re.compile(r"^(?:inventory|cron)-[0-9]{6,}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 
 
@@ -69,8 +70,8 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     if not isinstance(event_name, str) or not EVENT_NAME_RE.match(event_name):
         raise SystemExit("event_name must be a valid event name")
     delivery_id = payload.get("delivery_id")
-    if not isinstance(delivery_id, str) or not UUID_RE.match(delivery_id):
-        raise SystemExit("delivery_id must be a UUID string")
+    if not isinstance(delivery_id, str) or not (UUID_RE.match(delivery_id) or WORKER_DELIVERY_RE.match(delivery_id)):
+        raise SystemExit("delivery_id must be a UUID or worker-generated delivery id")
     repo_id = payload.get("repo_id")
     if not isinstance(repo_id, int) or repo_id <= 0:
         raise SystemExit("repo_id must be a positive integer")
