@@ -30,6 +30,9 @@ def render_summary(data: object) -> str:
         errors = data.get("errors")
         if isinstance(errors, list) and errors:
             lines.append(f"- Errors: {len(errors)}")
+            for item in errors[:5]:
+                if isinstance(item, str) and item:
+                    lines.append(f"  - `{item}`")
     elif isinstance(data, list):
         lines.append(f"- Items: {len(data)}")
     return "\n".join(lines) + "\n"

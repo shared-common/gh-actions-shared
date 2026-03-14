@@ -8,6 +8,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import gitlab_sync  # noqa: E402
+import gitlab_org_sync  # noqa: E402
 import gitlab_sync_profile  # noqa: E402
 from branch_policy import BranchPolicy, BranchSpec  # noqa: E402
 
@@ -82,6 +83,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("xf-main", mode="sync"),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -95,6 +97,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("upstream", mode="sync"),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -110,6 +113,7 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.required_bws_secrets("xf-main", include_github_app=True, mode="sync"),
             (
                 "GL_BASE_URL",
+                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
@@ -131,6 +135,15 @@ class GitlabSyncTests(unittest.TestCase):
             gitlab_sync_profile.resolve_profile_group_path("xf-secops", lambda name: values[name]),
             "derived/secops",
         )
+
+    def test_org_sync_group_path_prefers_mapping_alias_key(self):
+        mapping = '{"GH_ORG_XF_CHECKOUT":"derived/gh-xf-checkout"}'
+        with mock.patch.dict("os.environ", {"GL_MAPPING_JSON_FILE": "/tmp/mapping"}, clear=False):
+            with mock.patch.object(gitlab_org_sync, "require_secret", side_effect=lambda name: mapping if name == "GL_MAPPING_JSON" else "unused"):
+                self.assertEqual(
+                    gitlab_org_sync._resolve_gitlab_group_path("xf-checkout", "xf-checkout"),
+                    "derived/gh-xf-checkout",
+                )
 
     def test_require_gitlab_group_path_requires_nested_path(self):
         self.assertEqual(

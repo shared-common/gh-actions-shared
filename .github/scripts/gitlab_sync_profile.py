@@ -76,6 +76,7 @@ def required_bws_secrets(profile: str, *, include_github_app: bool = False, mode
     elif mode == "sync":
         ordered = [
             "GL_BASE_URL",
+            "GL_MAPPING_JSON",
             "GIT_BRANCH_PREFIX",
             "GIT_BRANCH_MAIN",
             "GIT_BRANCH_STAGING",

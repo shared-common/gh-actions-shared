@@ -11,6 +11,14 @@ from gitlab_sync import run_sync
 from repo_filters import apply_filters
 
 
+PROFILE_MAPPING_KEYS = {
+    "upstream": "GH_ORG_UPSTREAM",
+    "xf-main": "GH_ORG_XF_MAIN",
+    "xf-secops": "GH_ORG_XF_SECOPS",
+    "xf-checkout": "GH_ORG_XF_CHECKOUT",
+}
+
+
 def _prefix_results(repo_full_name: str, results: dict) -> dict:
     prefixed: Dict[str, List[str]] = {"created": [], "updated": [], "skipped": []}
     for key in prefixed:
@@ -20,13 +28,31 @@ def _prefix_results(repo_full_name: str, results: dict) -> dict:
     return prefixed
 
 
+def _resolve_gitlab_group_path(target_org: str, target_profile: str) -> str:
+    mapping_file = os.environ.get("GL_MAPPING_JSON_FILE", "").strip()
+    if mapping_file:
+        try:
+            mapping = json.loads(require_secret("GL_MAPPING_JSON"))
+        except json.JSONDecodeError as exc:
+            raise SystemExit("GL_MAPPING_JSON is not valid JSON") from exc
+        if isinstance(mapping, dict):
+            alias_key = PROFILE_MAPPING_KEYS.get(target_profile)
+            for key in (target_org, target_profile, alias_key):
+                if not key:
+                    continue
+                value = mapping.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return resolve_profile_group_path(target_profile, require_secret)
+
+
 def main() -> int:
     target_org = require_env("TARGET_ORG")
     target_profile = require_env("TARGET_PROFILE")
     app_id = require_secret("GH_ORG_SHARED_APP_ID")
     pem_path = require_env("GH_ORG_SHARED_APP_PEM_FILE")
     filters_path = os.environ.get("REPO_FILTERS_PATH", config_path("repo-filters.json"))
-    gitlab_group_path = resolve_profile_group_path(target_profile, require_secret)
+    gitlab_group_path = _resolve_gitlab_group_path(target_org, target_profile)
 
     installation_id = get_installation_id_for_org(app_id, pem_path, target_org)
     token = get_installation_token(app_id, pem_path, installation_id)
