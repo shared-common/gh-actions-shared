@@ -79,31 +79,27 @@ class GitlabSyncTests(unittest.TestCase):
 
     def test_required_bws_secrets_are_profile_scoped(self):
         self.assertEqual(
-            gitlab_sync_profile.required_bws_secrets("xf-main"),
+            gitlab_sync_profile.required_bws_secrets("xf-main", mode="sync"),
             (
                 "GL_BASE_URL",
-                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
-                "GIT_BRANCH_RELEASE",
-                "GIT_BRANCH_SNAPSHOT",
-                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_DERIVED",
+                "GL_GROUP_SUB_XF_MAIN",
                 "GL_BRIDGE_FORK_USER_DERIVED",
                 "GL_PAT_FORK_DERIVED_SVC",
             ),
         )
         self.assertEqual(
-            gitlab_sync_profile.required_bws_secrets("upstream"),
+            gitlab_sync_profile.required_bws_secrets("upstream", mode="sync"),
             (
                 "GL_BASE_URL",
-                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
-                "GIT_BRANCH_RELEASE",
-                "GIT_BRANCH_SNAPSHOT",
-                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_UPSTREAM",
+                "GL_GROUP_SUB_CANONICAL",
                 "GL_BRIDGE_FORK_USER_SEEDBED",
                 "GL_PAT_FORK_SEEDBED_SVC",
             ),
@@ -111,22 +107,30 @@ class GitlabSyncTests(unittest.TestCase):
 
     def test_required_bws_secrets_include_github_app_when_requested(self):
         self.assertEqual(
-            gitlab_sync_profile.required_bws_secrets("xf-main", include_github_app=True),
+            gitlab_sync_profile.required_bws_secrets("xf-main", include_github_app=True, mode="sync"),
             (
                 "GL_BASE_URL",
-                "GL_MAPPING_JSON",
                 "GIT_BRANCH_PREFIX",
                 "GIT_BRANCH_MAIN",
                 "GIT_BRANCH_STAGING",
-                "GIT_BRANCH_RELEASE",
-                "GIT_BRANCH_SNAPSHOT",
-                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_DERIVED",
+                "GL_GROUP_SUB_XF_MAIN",
                 "GL_BRIDGE_FORK_USER_DERIVED",
                 "GL_PAT_FORK_DERIVED_SVC",
                 "GH_ORG_SHARED_APP_ID",
                 "GH_ORG_SHARED_APP_PEM",
                 "GH_INSTALL_JSON",
             ),
+        )
+
+    def test_resolve_profile_group_path(self):
+        values = {
+            "GL_GROUP_TOP_DERIVED": "derived",
+            "GL_GROUP_SUB_XF_SECOPS": "secops",
+        }
+        self.assertEqual(
+            gitlab_sync_profile.resolve_profile_group_path("xf-secops", lambda name: values[name]),
+            "derived/secops",
         )
 
     def test_require_gitlab_group_path_requires_nested_path(self):
@@ -203,6 +207,48 @@ class GitlabSyncTests(unittest.TestCase):
 
         self.assertEqual(run_calls[0][3], "push")
         self.assertIn("--force-with-lease=refs/heads/github/mcr/main:" + ("a" * 40), run_calls[1])
+
+    def test_ensure_gitlab_protected_branch_is_noop_when_already_pushable(self):
+        current = {
+            "push_access_levels": [{"access_level": 40}],
+            "allow_force_push": True,
+        }
+        with mock.patch.object(gitlab_sync, "_get_gitlab_protected_branch", return_value=current):
+            with mock.patch.object(gitlab_sync, "_gitlab_request") as request:
+                changed = gitlab_sync.ensure_gitlab_protected_branch("https://gitlab.example", "token", 77, "github/mcr/main")
+
+        self.assertFalse(changed)
+        request.assert_not_called()
+
+    def test_ensure_gitlab_protected_branch_recreates_non_force_pushable_branch(self):
+        current = {
+            "push_access_levels": [{"access_level": 40}],
+            "allow_force_push": False,
+        }
+        calls = []
+
+        def fake_request(method, _base_url, path, _token, payload=None, **_kwargs):
+            calls.append((method, path, payload))
+            return None
+
+        with mock.patch.object(gitlab_sync, "_get_gitlab_protected_branch", return_value=current):
+            with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
+                changed = gitlab_sync.ensure_gitlab_protected_branch("https://gitlab.example", "token", 77, "github/mcr/main")
+
+        self.assertTrue(changed)
+        self.assertEqual(calls[0], ("DELETE", "/projects/77/protected_branches/github%2Fmcr%2Fmain", None))
+        self.assertEqual(calls[1][0], "POST")
+        self.assertEqual(calls[1][1], "/projects/77/protected_branches")
+        self.assertEqual(
+            calls[1][2],
+            {
+                "name": "github/mcr/main",
+                "push_access_level": 30,
+                "merge_access_level": 40,
+                "unprotect_access_level": 40,
+                "allow_force_push": True,
+            },
+        )
 
 
 if __name__ == "__main__":

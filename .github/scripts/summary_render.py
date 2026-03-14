@@ -8,10 +8,16 @@ def render_summary(data: object) -> str:
     if isinstance(data, dict):
         results = data.get("results") if isinstance(data, dict) else None
         repo = data.get("repo")
+        org = data.get("org")
+        profile = data.get("profile")
         job = data.get("job_type")
         event_id = data.get("event_id")
         if repo:
             lines.append(f"- Repo: `{repo}`")
+        if org:
+            lines.append(f"- Org: `{org}`")
+        if profile:
+            lines.append(f"- Profile: `{profile}`")
         if job:
             lines.append(f"- Job type: `{job}`")
         if event_id:

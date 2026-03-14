@@ -4,9 +4,6 @@ name: gitlab-sync-core
 "on":
   workflow_call:
     inputs:
-      validated-payload:
-        required: true
-        type: string
       target-org:
         required: true
         type: string
@@ -40,7 +37,7 @@ permissions: {}
 jobs:
   gitlab_sync:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -49,11 +46,12 @@ jobs:
         env:
           SHARED_REPO: ${{ inputs.shared-repo }}
           SHARED_REF: ${{ inputs.shared-ref }}
-          VALIDATED_PAYLOAD: ${{ inputs.validated-payload }}
+          TARGET_ORG: ${{ inputs.target-org }}
+          TARGET_PROFILE: ${{ inputs.target-profile }}
         run: |
           set -euo pipefail
           allowed_repo="shared-common/gh-actions-shared"
-          allowed_refs="v0.0.34"
+          allowed_refs="v0.0.34 v0.0.35"
           if [ "$SHARED_REPO" != "$allowed_repo" ]; then
             printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
             exit 1
@@ -69,12 +67,8 @@ jobs:
             printf '%s\n' "shared-ref not allowlisted: $SHARED_REF" >&2
             exit 1
           fi
-          max_bytes=262144
-          payload_size="$(
-            printf '%s' "$VALIDATED_PAYLOAD" | wc -c | tr -d '[:space:]'
-          )"
-          if [ "${payload_size}" -gt "${max_bytes}" ]; then
-            printf '%s\n' "validated-payload too large: ${payload_size} bytes" >&2
+          if [ -z "$TARGET_ORG" ] || [ -z "$TARGET_PROFILE" ]; then
+            printf '%s\n' "target-org and target-profile are required" >&2
             exit 1
           fi
 
@@ -103,6 +97,7 @@ jobs:
           default_secrets="$(
             python3 shared/.github/scripts/print_gitlab_sync_bws_secrets.py \
               --profile "${TARGET_PROFILE}" \
+              --mode sync \
               --include-github-app
           )"
           override_clean="$(printf '%s' "${BWS_SECRETS_OVERRIDE}" | tr -d '[:space:]')"
@@ -125,39 +120,19 @@ jobs:
           secrets: ${{ steps.resolve_bws.outputs.secrets }}
           output-dir: shared/.secrets
 
-      - name: Write validated payload
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat <<'JSON' > validated.json
-          ${{ inputs.validated-payload }}
-          JSON
-
-      - name: Mint GitHub installation token
-        shell: bash
-        env:
-          TARGET_ORG: ${{ inputs.target-org }}
-        run: |
-          set -euo pipefail
-          python3 shared/.github/scripts/github_app_token.py --org "${TARGET_ORG}" --out gh_install_token.txt
-          token="$(cat gh_install_token.txt)"
-          if [ -z "${token}" ]; then
-            echo "Minted empty GitHub installation token" >&2
-            exit 1
-          fi
-          echo "::add-mask::$token"
-          echo "GH_INSTALL_TOKEN_FILE=gh_install_token.txt" >> "$GITHUB_ENV"
-
       - name: GitLab sync
         shell: bash
         env:
-          INPUT_PATH: validated.json
-          OUTPUT_PATH: summary.json
           TARGET_ORG: ${{ inputs.target-org }}
           TARGET_PROFILE: ${{ inputs.target-profile }}
+          REPO_FILTERS_PATH: shared/configs/repo-filters.json
+          OUTPUT_PATH: summary.json
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
         run: |
           set -euo pipefail
-          python3 shared/.github/scripts/gitlab_sync.py
+          python3 shared/.github/scripts/gitlab_org_sync.py
 
       - name: Render summary
         shell: bash
@@ -176,5 +151,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f "${GH_INSTALL_TOKEN_FILE:-}" gh_install_token.txt
           rm -rf shared/.secrets

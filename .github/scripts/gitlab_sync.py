@@ -25,6 +25,11 @@ class GitlabTarget:
     base_url: str
 
 
+PROTECTED_BRANCH_PUSH_LEVEL = 30
+PROTECTED_BRANCH_MERGE_LEVEL = 40
+PROTECTED_BRANCH_UNPROTECT_LEVEL = 40
+
+
 def load_input() -> dict:
     path = os.environ.get("INPUT_PATH")
     if not path:
@@ -35,6 +40,21 @@ def load_input() -> dict:
         raise SystemExit(f"Missing INPUT_PATH file: {path}") from exc
     except json.JSONDecodeError as exc:
         raise SystemExit(f"INPUT_PATH contains invalid JSON: {exc.msg}") from exc
+
+
+def _load_installation_token() -> Optional[str]:
+    token_path = os.environ.get("GH_INSTALL_TOKEN_FILE", "").strip()
+    if not token_path:
+        return None
+    try:
+        token = Path(token_path).read_text(encoding="utf-8").strip()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Missing GH_INSTALL_TOKEN_FILE: {token_path}") from exc
+    except OSError as exc:
+        raise SystemExit(f"Unable to read GH_INSTALL_TOKEN_FILE: {token_path}") from exc
+    if not token:
+        raise SystemExit("GH_INSTALL_TOKEN_FILE is empty")
+    return token
 
 
 def _require_branch(policy: BranchPolicy, env_name: str) -> str:
@@ -315,6 +335,54 @@ def _get_gitlab_branch_sha(base_url: str, token: str, project_id: int, branch: s
     return str(commit_id) if isinstance(commit_id, str) else None
 
 
+def _get_gitlab_protected_branch(base_url: str, token: str, project_id: int, branch: str) -> Optional[dict]:
+    encoded = urllib.parse.quote(branch, safe="")
+    try:
+        data = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_branches/{encoded}", token)
+    except ApiError as exc:
+        if exc.status == 404:
+            return None
+        raise
+    return data if isinstance(data, dict) else None
+
+
+def _protected_branch_allows_sync(data: dict) -> bool:
+    if not isinstance(data, dict):
+        return False
+    push_levels = data.get("push_access_levels")
+    if not isinstance(push_levels, list):
+        return False
+    allows_push = False
+    for item in push_levels:
+        if not isinstance(item, dict):
+            continue
+        access_level = item.get("access_level")
+        if access_level in {30, 40}:
+            allows_push = True
+            break
+    return allows_push and bool(data.get("allow_force_push"))
+
+
+def ensure_gitlab_protected_branch(base_url: str, token: str, project_id: int, branch: str) -> bool:
+    current = _get_gitlab_protected_branch(base_url, token, project_id, branch)
+    if current and _protected_branch_allows_sync(current):
+        return False
+
+    encoded = urllib.parse.quote(branch, safe="")
+    if current:
+        _gitlab_request("DELETE", base_url, f"/projects/{project_id}/protected_branches/{encoded}", token)
+
+    payload = {
+        "name": branch,
+        "push_access_level": PROTECTED_BRANCH_PUSH_LEVEL,
+        "merge_access_level": PROTECTED_BRANCH_MERGE_LEVEL,
+        "unprotect_access_level": PROTECTED_BRANCH_UNPROTECT_LEVEL,
+        "allow_force_push": True,
+    }
+    _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_branches", token, payload)
+    return True
+
+
 def _run(cmd: List[str], cwd: Optional[str] = None, *, secrets: Iterable[str] = ()) -> subprocess.CompletedProcess:
     proc = subprocess.run(cmd, cwd=cwd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode != 0:
@@ -477,8 +545,14 @@ def _should_force_retry(stderr: str) -> bool:
     return any(pattern in lowered for pattern in patterns)
 
 
-def main() -> int:
-    input_data = load_input()
+def run_sync(
+    input_data: dict,
+    *,
+    gh_install_token: Optional[str] = None,
+    allow_project_create: bool = True,
+    protect_tracked_branches: bool = True,
+    bootstrap_required_branches: bool = True,
+) -> dict:
     repo_full_name = input_data.get("repo_full_name")
     org, repo_name = validate_repo_full_name(repo_full_name)
     job_type = str(input_data.get("job_type") or "create").strip()
@@ -499,12 +573,18 @@ def main() -> int:
     if not target_profile:
         raise SystemExit("Missing TARGET_PROFILE")
     target = resolve_gitlab_target(target_profile, repo_name, require_gitlab_group_path(input_data))
-    project, project_created = ensure_gitlab_project(target)
+    if allow_project_create:
+        project, project_created = ensure_gitlab_project(target)
+    else:
+        project = _get_gitlab_project(target.base_url, target.api_token, target.project_path)
+        if not project:
+            raise SystemExit(f"GitLab project missing for sync: {target.project_path}")
+        project_created = False
     project_id = project.get("id") if isinstance(project, dict) else None
     if not project_id:
         raise SystemExit("Failed to resolve GitLab project ID")
 
-    gh_install_token = require_secret("GH_INSTALL_TOKEN")
+    gh_install_token = gh_install_token or _load_installation_token() or require_secret("GH_INSTALL_TOKEN")
 
     github_url = f"https://x-access-token:{urllib.parse.quote(gh_install_token, safe='')}@github.com/{org}/{repo_name}.git"
     base_host = target.base_url.replace("https://", "").replace("http://", "").rstrip("/")
@@ -528,23 +608,24 @@ def main() -> int:
         if project_created:
             results["created"].append(f"project:{target.project_path}")
 
-        for branch in required_branches:
-            if _gitlab_branch_exists(target.base_url, target.api_token, int(project_id), branch):
-                continue
-            if _branch_exists(gitlab_url, branch, secrets=secrets):
-                continue
-            _fetch_branch(repo_path, github_url, branch, fetched, remote_name="github", secrets=secrets)
-            _push_branch(
-                repo_path,
-                gitlab_url,
-                branch,
-                branch,
-                remote_name="gitlab",
-                lfs_ref=branch,
-                secrets=secrets,
-                allow_existing=True,
-            )
-            results["created"].append(branch)
+        if bootstrap_required_branches:
+            for branch in required_branches:
+                if _gitlab_branch_exists(target.base_url, target.api_token, int(project_id), branch):
+                    continue
+                if _branch_exists(gitlab_url, branch, secrets=secrets):
+                    continue
+                _fetch_branch(repo_path, github_url, branch, fetched, remote_name="github", secrets=secrets)
+                _push_branch(
+                    repo_path,
+                    gitlab_url,
+                    branch,
+                    branch,
+                    remote_name="gitlab",
+                    lfs_ref=branch,
+                    secrets=secrets,
+                    allow_existing=True,
+                )
+                results["created"].append(branch)
 
         for target_branch, source_branch in tracked_updates.items():
             if _gitlab_branch_exists(target.base_url, target.api_token, int(project_id), target_branch):
@@ -564,6 +645,10 @@ def main() -> int:
             )
             results["created"].append(target_branch)
 
+        if protect_tracked_branches:
+            for target_branch in tracked_updates:
+                ensure_gitlab_protected_branch(target.base_url, target.api_token, int(project_id), target_branch)
+
         ref_sha_cache: Dict[str, Optional[str]] = {}
         ref_value = input_data.get("ref")
         after_value = _normalize_sha(input_data.get("after"))
@@ -580,6 +665,8 @@ def main() -> int:
             if gh_sha and gl_sha == gh_sha:
                 results["skipped"].append(target_branch)
                 continue
+            if protect_tracked_branches:
+                ensure_gitlab_protected_branch(target.base_url, target.api_token, int(project_id), target_branch)
             _fetch_branch(repo_path, github_url, source_branch, fetched, remote_name="github", secrets=secrets)
             _push_branch(
                 repo_path,
@@ -605,6 +692,11 @@ def main() -> int:
     event_id = input_data.get("event_id")
     if isinstance(event_id, str) and event_id:
         payload["event_id"] = event_id
+    return payload
+
+
+def main() -> int:
+    payload = run_sync(load_input())
 
     output_path = os.environ.get("OUTPUT_PATH")
     if output_path:
