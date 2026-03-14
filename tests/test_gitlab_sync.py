@@ -132,6 +132,7 @@ class GitlabSyncTests(unittest.TestCase):
                 "GL_PAT_FORK_DERIVED_SVC",
                 "GH_ORG_SHARED_APP_ID",
                 "GH_ORG_SHARED_APP_PEM",
+                "GH_INSTALL_JSON",
             ),
         )
 
