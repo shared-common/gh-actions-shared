@@ -9,6 +9,11 @@
       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|(?:inventory|cron)-[0-9]{6,})$"
     },
     "org_login": {"type": "string", "maxLength": 100},
+    "gitlab_group_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+$",
+      "maxLength": 300
+    },
     "repo_id": {"type": "integer"},
     "event_id": {"type": "string", "maxLength": 200},
     "job_type": {"type": "string", "enum": ["create", "polling", "sync"]},
@@ -34,6 +39,6 @@
       "maxLength": 300
     }
   },
-  "required": ["event_name", "delivery_id", "org_login", "repo_id", "repo_full_name", "job_type", "action", "ref", "after", "source_repo_full_name"],
+  "required": ["event_name", "delivery_id", "org_login", "gitlab_group_path", "repo_id", "repo_full_name", "job_type", "action", "ref", "after", "source_repo_full_name"],
   "additionalProperties": false
 }

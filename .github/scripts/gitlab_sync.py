@@ -66,9 +66,18 @@ def select_sync_sources(input_data: dict, tracked_sources: Sequence[str]) -> Lis
     return unique_sources
 
 
-def resolve_gitlab_target(target_profile: str, repo_name: str) -> GitlabTarget:
-    group_top, group_sub, git_username, api_token = resolve_profile_values(target_profile, require_secret)
-    group_path = f"{group_top}/{group_sub}"
+def require_gitlab_group_path(input_data: dict) -> str:
+    value = input_data.get("gitlab_group_path")
+    if not isinstance(value, str):
+        raise SystemExit("Missing gitlab_group_path in INPUT_PATH payload")
+    group_path = value.strip()
+    if "/" not in group_path:
+        raise SystemExit("gitlab_group_path must include at least one slash")
+    return group_path
+
+
+def resolve_gitlab_target(target_profile: str, repo_name: str, group_path: str) -> GitlabTarget:
+    git_username, api_token = resolve_profile_values(target_profile, require_secret)
 
     return GitlabTarget(
         project_path=f"{group_path}/{repo_name}",
@@ -140,10 +149,42 @@ def _get_gitlab_project(base_url: str, token: str, project_path: str) -> Optiona
 
 def _get_gitlab_group_id(base_url: str, token: str, group_path: str) -> int:
     encoded = urllib.parse.quote(group_path, safe="")
-    data = _gitlab_request("GET", base_url, f"/groups/{encoded}", token)
+    try:
+        data = _gitlab_request("GET", base_url, f"/groups/{encoded}", token)
+    except ApiError as exc:
+        if exc.status != 404:
+            raise
+        data = _search_gitlab_group(base_url, token, group_path)
+        if data is None:
+            raise SystemExit(f"GitLab group not found: {group_path}") from exc
     if not isinstance(data, dict) or not data.get("id"):
         raise SystemExit(f"Unable to resolve GitLab group id for {group_path}")
     return int(data["id"])
+
+
+def _search_gitlab_group(base_url: str, token: str, group_path: str) -> Optional[dict]:
+    target_full = group_path.lower()
+    target_name = group_path.rsplit("/", 1)[-1].lower()
+    search = urllib.parse.quote(target_name, safe="")
+    page = 1
+    while True:
+        data = _gitlab_request(
+            "GET",
+            base_url,
+            f"/groups?search={search}&per_page=100&page={page}",
+            token,
+        )
+        if not isinstance(data, list) or not data:
+            return None
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            full_path = str(item.get("full_path", "")).lower()
+            if full_path == target_full:
+                return item
+        if len(data) < 100:
+            return None
+        page += 1
 
 
 def _find_project_in_group(base_url: str, token: str, group_id: int, project_path: str, project_name: str) -> Optional[dict]:
@@ -498,7 +539,7 @@ def main() -> int:
     target_profile = os.environ.get("TARGET_PROFILE", "").strip()
     if not target_profile:
         raise SystemExit("Missing TARGET_PROFILE")
-    target = resolve_gitlab_target(target_profile, repo_name)
+    target = resolve_gitlab_target(target_profile, repo_name, require_gitlab_group_path(input_data))
     project, project_created = ensure_gitlab_project(target)
     project_id = project.get("id") if isinstance(project, dict) else None
     if not project_id:

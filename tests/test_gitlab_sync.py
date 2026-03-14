@@ -50,28 +50,24 @@ class GitlabSyncTests(unittest.TestCase):
 
     def test_resolve_gitlab_target_maps_upstream_profile(self):
         values = {
-            "GL_GROUP_TOP_UPSTREAM": "seedbed",
-            "GL_GROUP_SUB_CANONICAL": "canonical",
             "GL_BRIDGE_FORK_USER_SEEDBED": "seedbed-user",
             "GL_PAT_FORK_SEEDBED_SVC": "seedbed-token",
             "GL_BASE_URL": "https://gitlab.example",
         }
         with mock.patch.object(gitlab_sync, "require_secret", side_effect=lambda name: values[name]):
-            target = gitlab_sync.resolve_gitlab_target("upstream", "demo")
+            target = gitlab_sync.resolve_gitlab_target("upstream", "demo", "seedbed/canonical")
         self.assertEqual(target.project_path, "seedbed/canonical/demo")
         self.assertEqual(target.git_username, "seedbed-user")
         self.assertEqual(target.api_token, "seedbed-token")
 
     def test_resolve_gitlab_target_maps_derived_profile(self):
         values = {
-            "GL_GROUP_TOP_DIVERGE": "derived",
-            "GL_GROUP_SUB_XF_SECOPS": "secops",
             "GL_BRIDGE_FORK_USER_DERIVED": "derived-user",
             "GL_PAT_FORK_DERIVED_SVC": "derived-token",
             "GL_BASE_URL": "https://gitlab.example",
         }
         with mock.patch.object(gitlab_sync, "require_secret", side_effect=lambda name: values[name]):
-            target = gitlab_sync.resolve_gitlab_target("xf-secops", "demo")
+            target = gitlab_sync.resolve_gitlab_target("xf-secops", "demo", "derived/secops")
         self.assertEqual(target.project_path, "derived/secops/demo")
         self.assertEqual(target.git_username, "derived-user")
         self.assertEqual(target.api_token, "derived-token")
@@ -92,8 +88,6 @@ class GitlabSyncTests(unittest.TestCase):
                 "GIT_BRANCH_RELEASE",
                 "GIT_BRANCH_SNAPSHOT",
                 "GIT_BRANCH_FEATURE",
-                "GL_GROUP_TOP_DIVERGE",
-                "GL_GROUP_SUB_XF_MAIN",
                 "GL_BRIDGE_FORK_USER_DERIVED",
                 "GL_PAT_FORK_DERIVED_SVC",
             ),
@@ -108,12 +102,53 @@ class GitlabSyncTests(unittest.TestCase):
                 "GIT_BRANCH_RELEASE",
                 "GIT_BRANCH_SNAPSHOT",
                 "GIT_BRANCH_FEATURE",
-                "GL_GROUP_TOP_UPSTREAM",
-                "GL_GROUP_SUB_CANONICAL",
                 "GL_BRIDGE_FORK_USER_SEEDBED",
                 "GL_PAT_FORK_SEEDBED_SVC",
             ),
         )
+
+    def test_required_bws_secrets_include_github_app_when_requested(self):
+        self.assertEqual(
+            gitlab_sync_profile.required_bws_secrets("xf-main", include_github_app=True),
+            (
+                "GL_BASE_URL",
+                "GIT_BRANCH_PREFIX",
+                "GIT_BRANCH_MAIN",
+                "GIT_BRANCH_STAGING",
+                "GIT_BRANCH_RELEASE",
+                "GIT_BRANCH_SNAPSHOT",
+                "GIT_BRANCH_FEATURE",
+                "GL_BRIDGE_FORK_USER_DERIVED",
+                "GL_PAT_FORK_DERIVED_SVC",
+                "GH_ORG_SHARED_APP_ID",
+                "GH_ORG_SHARED_APP_PEM",
+                "GH_INSTALL_JSON",
+            ),
+        )
+
+    def test_require_gitlab_group_path_requires_nested_path(self):
+        self.assertEqual(
+            gitlab_sync.require_gitlab_group_path({"gitlab_group_path": "derived/gh-xf-main"}),
+            "derived/gh-xf-main",
+        )
+        with self.assertRaises(SystemExit):
+            gitlab_sync.require_gitlab_group_path({"gitlab_group_path": "derived"})
+
+    def test_get_gitlab_group_id_falls_back_to_group_search(self):
+        def fake_request(method, _base_url, path, _token, payload=None, **_kwargs):
+            self.assertIsNone(payload)
+            if method != "GET":
+                self.fail("expected only GET calls")
+            if path == "/groups/derived%2Fxf-main":
+                raise gitlab_sync.ApiError(404, '{"message":"404 Group Not Found"}')
+            if path == "/groups?search=xf-main&per_page=100&page=1":
+                return [{"id": 321, "full_path": "derived/xf-main", "path": "xf-main"}]
+            self.fail(f"unexpected path: {path}")
+
+        with mock.patch.object(gitlab_sync, "_gitlab_request", side_effect=fake_request):
+            group_id = gitlab_sync._get_gitlab_group_id("https://gitlab.example", "token", "derived/xf-main")
+
+        self.assertEqual(group_id, 321)
 
     def test_protect_branches_updates_force_push_when_existing_branch_disallows_it(self):
         calls = []

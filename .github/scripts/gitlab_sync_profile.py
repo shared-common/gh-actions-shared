@@ -14,12 +14,16 @@ COMMON_BWS_SECRETS = (
     "GIT_BRANCH_FEATURE",
 )
 
+GITHUB_APP_BWS_SECRETS = (
+    "GH_ORG_SHARED_APP_ID",
+    "GH_ORG_SHARED_APP_PEM",
+    "GH_INSTALL_JSON",
+)
+
 
 @dataclass(frozen=True)
 class GitlabProfileConfig:
     profile: str
-    group_top_secret: str
-    group_sub_secret: str
     git_username_secret: str
     api_token_secret: str
 
@@ -27,29 +31,21 @@ class GitlabProfileConfig:
 PROFILE_CONFIG: dict[str, GitlabProfileConfig] = {
     "upstream": GitlabProfileConfig(
         profile="upstream",
-        group_top_secret="GL_GROUP_TOP_UPSTREAM",
-        group_sub_secret="GL_GROUP_SUB_CANONICAL",
         git_username_secret="GL_BRIDGE_FORK_USER_SEEDBED",
         api_token_secret="GL_PAT_FORK_SEEDBED_SVC",
     ),
     "xf-main": GitlabProfileConfig(
         profile="xf-main",
-        group_top_secret="GL_GROUP_TOP_DIVERGE",
-        group_sub_secret="GL_GROUP_SUB_XF_MAIN",
         git_username_secret="GL_BRIDGE_FORK_USER_DERIVED",
         api_token_secret="GL_PAT_FORK_DERIVED_SVC",
     ),
     "xf-secops": GitlabProfileConfig(
         profile="xf-secops",
-        group_top_secret="GL_GROUP_TOP_DIVERGE",
-        group_sub_secret="GL_GROUP_SUB_XF_SECOPS",
         git_username_secret="GL_BRIDGE_FORK_USER_DERIVED",
         api_token_secret="GL_PAT_FORK_DERIVED_SVC",
     ),
     "xf-checkout": GitlabProfileConfig(
         profile="xf-checkout",
-        group_top_secret="GL_GROUP_TOP_DIVERGE",
-        group_sub_secret="GL_GROUP_SUB_XF_CHECKOUT",
         git_username_secret="GL_BRIDGE_FORK_USER_DERIVED",
         api_token_secret="GL_PAT_FORK_DERIVED_SVC",
     ),
@@ -63,33 +59,36 @@ def get_profile_config(profile: str) -> GitlabProfileConfig:
         raise SystemExit(f"Unsupported target profile for GitLab sync: {profile}") from exc
 
 
-def required_bws_secrets(profile: str) -> tuple[str, ...]:
+def required_bws_secrets(profile: str, *, include_github_app: bool = False) -> tuple[str, ...]:
     cfg = get_profile_config(profile)
     ordered: list[str] = list(COMMON_BWS_SECRETS)
-    for name in (cfg.group_top_secret, cfg.group_sub_secret, cfg.git_username_secret, cfg.api_token_secret):
+    for name in (cfg.git_username_secret, cfg.api_token_secret):
         if name not in ordered:
             ordered.append(name)
+    if include_github_app:
+        for name in GITHUB_APP_BWS_SECRETS:
+            if name not in ordered:
+                ordered.append(name)
     return tuple(ordered)
 
 
 def resolve_profile_values(
     profile: str,
     require_secret: Callable[[str], str],
-) -> tuple[str, str, str, str]:
+) -> tuple[str, str]:
     cfg = get_profile_config(profile)
-    group_top = require_secret(cfg.group_top_secret)
-    group_sub = require_secret(cfg.group_sub_secret)
     git_username = require_secret(cfg.git_username_secret)
     api_token = require_secret(cfg.api_token_secret)
-    return group_top, group_sub, git_username, api_token
+    return git_username, api_token
 
 
-def format_required_bws_secrets(profile: str) -> str:
-    return ",".join(required_bws_secrets(profile))
+def format_required_bws_secrets(profile: str, *, include_github_app: bool = False) -> str:
+    return ",".join(required_bws_secrets(profile, include_github_app=include_github_app))
 
 
 __all__: Sequence[str] = (
     "COMMON_BWS_SECRETS",
+    "GITHUB_APP_BWS_SECRETS",
     "GitlabProfileConfig",
     "PROFILE_CONFIG",
     "format_required_bws_secrets",

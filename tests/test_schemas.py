@@ -21,6 +21,7 @@ class SchemaTests(unittest.TestCase):
             "event_id": "inventory-1773473445000",
             "job_type": "polling",
             "repo_full_name": "xf-secops/UAC-Bypass-FUD",
+            "gitlab_group_path": "derived/gh-xf-secops",
             "action": "polling",
             "ref": None,
             "after": None,

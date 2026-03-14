@@ -39,9 +39,6 @@ name: prepare-sync-core
       validated-payload:
         description: "Validated payload JSON"
         value: ${{ jobs.prepare.outputs.validated-payload }}
-      github-install-token:
-        description: "Ephemeral GitHub installation token for the target org"
-        value: ${{ jobs.prepare.outputs.github-install-token }}
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
@@ -56,7 +53,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       validated-payload: ${{ steps.capture_payload.outputs.validated_payload }}
-      github-install-token: ${{ steps.issue_token.outputs.github_install_token }}
     permissions:
       contents: read
     steps:
@@ -180,22 +176,6 @@ jobs:
             cat validated.json
             printf '\n%s\n' "$delimiter"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Mint installation token
-        id: issue_token
-        shell: bash
-        env:
-          INPUT_PATH: validated.json
-          OUTPUT_PATH: gh_install_token.txt
-          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
-          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
-          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
-        run: |
-          set -euo pipefail
-          python3 shared/.github/scripts/issue_installation_token.py
-          token="$(cat gh_install_token.txt)"
-          echo "::add-mask::$token"
-          printf 'github_install_token=%s\n' "$token" >> "$GITHUB_OUTPUT"
 
       - name: Cleanup secrets
         if: always()

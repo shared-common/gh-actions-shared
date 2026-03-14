@@ -34,8 +34,6 @@ name: gitlab-sync-core
         required: true
       BWS_PROJECT_ID:
         required: true
-      GH_INSTALL_TOKEN:
-        required: true
 
 permissions: {}
 
@@ -102,13 +100,33 @@ jobs:
           BWS_SECRETS_OVERRIDE: ${{ inputs.bws-secrets }}
         run: |
           set -euo pipefail
+          default_secrets="$(
+            python3 shared/.github/scripts/print_gitlab_sync_bws_secrets.py \
+              --profile "${TARGET_PROFILE}" \
+              --include-github-app
+          )"
           override_clean="$(printf '%s' "${BWS_SECRETS_OVERRIDE}" | tr -d '[:space:]')"
           if [ -n "${override_clean}" ]; then
-            printf 'secrets=%s\n' "${override_clean}" >> "$GITHUB_OUTPUT"
+            secrets="$(
+              python3 - "${default_secrets}" "${override_clean}" <<'PY'
+              import sys
+
+              ordered = []
+              seen = set()
+              for raw in sys.argv[1:]:
+                  for item in raw.split(","):
+                      item = item.strip()
+                      if not item or item in seen:
+                          continue
+                      ordered.append(item)
+                      seen.add(item)
+              print(",".join(ordered))
+              PY
+            )"
+            printf 'secrets=%s\n' "${secrets}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          secrets="$(python3 shared/.github/scripts/print_gitlab_sync_bws_secrets.py --profile "${TARGET_PROFILE}")"
-          printf 'secrets=%s\n' "${secrets}" >> "$GITHUB_OUTPUT"
+          printf 'secrets=%s\n' "${default_secrets}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch secrets from BWS
         uses: ./shared/.github/actions/bws-fetch
@@ -128,18 +146,20 @@ jobs:
           ${{ inputs.validated-payload }}
           JSON
 
-      - name: Materialize GitHub installation token
+      - name: Mint GitHub installation token
         shell: bash
         env:
-          GH_INSTALL_TOKEN: ${{ secrets.GH_INSTALL_TOKEN }}
+          TARGET_ORG: ${{ inputs.target-org }}
         run: |
           set -euo pipefail
-          umask 077
-          token_file="$(mktemp "${RUNNER_TEMP}/gh-install-token.XXXXXX")"
-          printf '%s' "$GH_INSTALL_TOKEN" > "$token_file"
-          chmod 600 "$token_file"
-          echo "::add-mask::$GH_INSTALL_TOKEN"
-          echo "GH_INSTALL_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          python3 shared/.github/scripts/github_app_token.py --org "${TARGET_ORG}" --out gh_install_token.txt
+          token="$(cat gh_install_token.txt)"
+          if [ -z "${token}" ]; then
+            echo "Minted empty GitHub installation token" >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "GH_INSTALL_TOKEN_FILE=gh_install_token.txt" >> "$GITHUB_ENV"
 
       - name: GitLab sync
         shell: bash
@@ -148,24 +168,6 @@ jobs:
           OUTPUT_PATH: summary.json
           TARGET_ORG: ${{ inputs.target-org }}
           TARGET_PROFILE: ${{ inputs.target-profile }}
-          GH_INSTALL_TOKEN_FILE: ${{ env.GH_INSTALL_TOKEN_FILE }}
-          GL_BASE_URL_FILE: ${{ env.GL_BASE_URL_FILE }}
-          GL_GROUP_TOP_UPSTREAM_FILE: ${{ env.GL_GROUP_TOP_UPSTREAM_FILE }}
-          GL_GROUP_SUB_CANONICAL_FILE: ${{ env.GL_GROUP_SUB_CANONICAL_FILE }}
-          GL_GROUP_TOP_DIVERGE_FILE: ${{ env.GL_GROUP_TOP_DIVERGE_FILE }}
-          GL_GROUP_SUB_XF_MAIN_FILE: ${{ env.GL_GROUP_SUB_XF_MAIN_FILE }}
-          GL_GROUP_SUB_XF_SECOPS_FILE: ${{ env.GL_GROUP_SUB_XF_SECOPS_FILE }}
-          GL_GROUP_SUB_XF_CHECKOUT_FILE: ${{ env.GL_GROUP_SUB_XF_CHECKOUT_FILE }}
-          GL_BRIDGE_FORK_USER_DERIVED_FILE: ${{ env.GL_BRIDGE_FORK_USER_DERIVED_FILE }}
-          GL_PAT_FORK_DERIVED_SVC_FILE: ${{ env.GL_PAT_FORK_DERIVED_SVC_FILE }}
-          GL_BRIDGE_FORK_USER_SEEDBED_FILE: ${{ env.GL_BRIDGE_FORK_USER_SEEDBED_FILE }}
-          GL_PAT_FORK_SEEDBED_SVC_FILE: ${{ env.GL_PAT_FORK_SEEDBED_SVC_FILE }}
-          GIT_BRANCH_PREFIX_FILE: ${{ env.GIT_BRANCH_PREFIX_FILE }}
-          GIT_BRANCH_MAIN_FILE: ${{ env.GIT_BRANCH_MAIN_FILE }}
-          GIT_BRANCH_STAGING_FILE: ${{ env.GIT_BRANCH_STAGING_FILE }}
-          GIT_BRANCH_RELEASE_FILE: ${{ env.GIT_BRANCH_RELEASE_FILE }}
-          GIT_BRANCH_SNAPSHOT_FILE: ${{ env.GIT_BRANCH_SNAPSHOT_FILE }}
-          GIT_BRANCH_FEATURE_FILE: ${{ env.GIT_BRANCH_FEATURE_FILE }}
         run: |
           set -euo pipefail
           python3 shared/.github/scripts/gitlab_sync.py
@@ -187,5 +189,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f "${GH_INSTALL_TOKEN_FILE:-}"
+          rm -f "${GH_INSTALL_TOKEN_FILE:-}" gh_install_token.txt
           rm -rf shared/.secrets

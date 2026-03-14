@@ -21,6 +21,7 @@ ORG_RE = re.compile(r"^[A-Za-z0-9-]+$")
 UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 WORKER_DELIVERY_RE = re.compile(r"^(?:inventory|cron)-[0-9]{6,}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
+GITLAB_GROUP_PATH_RE = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+$")
 
 
 def load_payload() -> Dict[str, Any]:
@@ -82,6 +83,14 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     job_type = payload.get("job_type")
     if job_type not in ALLOWED_JOB_TYPES:
         raise SystemExit(f"Unsupported job_type: {job_type}")
+
+    gitlab_group_path = payload.get("gitlab_group_path")
+    if not isinstance(gitlab_group_path, str):
+        raise SystemExit("gitlab_group_path must be a string")
+    gitlab_group_path = gitlab_group_path.strip()
+    if not GITLAB_GROUP_PATH_RE.match(gitlab_group_path):
+        raise SystemExit("gitlab_group_path must be a valid GitLab group path")
+    payload["gitlab_group_path"] = gitlab_group_path
 
     default_branch = payload.get("repo_default_branch")
     if isinstance(default_branch, str):

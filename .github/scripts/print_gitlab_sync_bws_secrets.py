@@ -6,8 +6,9 @@ from gitlab_sync_profile import format_required_bws_secrets
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", required=True)
+    parser.add_argument("--include-github-app", action="store_true")
     args = parser.parse_args()
-    print(format_required_bws_secrets(args.profile))
+    print(format_required_bws_secrets(args.profile, include_github_app=args.include_github_app))
     return 0
 
 
