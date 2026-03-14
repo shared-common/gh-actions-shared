@@ -164,6 +164,9 @@ jobs:
         shell: bash
         env:
           TARGET_ORG: ${{ inputs.target-org }}
+          GH_ORG_SHARED_APP_PEM_FILE: ${{ env.GH_ORG_SHARED_APP_PEM_FILE }}
+          GH_ORG_SHARED_APP_ID_FILE: ${{ env.GH_ORG_SHARED_APP_ID_FILE }}
+          GH_INSTALL_JSON_FILE: ${{ env.GH_INSTALL_JSON_FILE }}
         run: |
           set -euo pipefail
           OUTPUT_PATH=validated.json INPUT_PATH=payload.json \

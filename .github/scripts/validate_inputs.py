@@ -106,7 +106,9 @@ def validate_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     parent_full = payload.get("repo_parent_full_name")
     parent_branch = payload.get("repo_parent_default_branch")
     repo_is_fork = payload.get("repo_is_fork")
-    if repo_is_fork is True and not isinstance(parent_full, str):
+    missing_parent_full = not isinstance(parent_full, str)
+    missing_parent_branch = not isinstance(parent_branch, str)
+    if repo_is_fork is True and (missing_parent_full or missing_parent_branch):
         app_id = require_secret("GH_ORG_SHARED_APP_ID")
         pem_path = os.environ.get("GH_ORG_SHARED_APP_PEM_FILE", "").strip()
         if not pem_path:
