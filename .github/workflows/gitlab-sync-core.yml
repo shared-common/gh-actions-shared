@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           allowed_repo="shared-common/gh-actions-shared"
-          allowed_refs="v0.0.26"
+          allowed_refs="v0.0.27"
           if [ "$SHARED_REPO" != "$allowed_repo" ]; then
             printf '%s\n' "shared-repo not allowed: $SHARED_REPO" >&2
             exit 1
