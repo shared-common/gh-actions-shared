@@ -363,26 +363,39 @@ def _push_branch(
     lfs_ref: str,
     secrets: Iterable[str],
     allow_existing: bool = False,
+    allow_force_if_needed: bool = False,
+    expected_remote_sha: Optional[str] = None,
 ) -> None:
     _lfs_push(repo_path, remote_name, lfs_ref, source_remote="github", secrets=secrets)
-    proc = subprocess.run(
-        [
-            "git",
-            "-C",
-            repo_path,
-            "push",
-            remote_url,
-            f"refs/heads/{source_branch}:refs/heads/{target_branch}",
-        ],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    command = [
+        "git",
+        "-C",
+        repo_path,
+        "push",
+        remote_url,
+        f"refs/heads/{source_branch}:refs/heads/{target_branch}",
+    ]
+    proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode == 0:
         return
     stderr = _sanitize_text(proc.stderr.decode("utf-8", errors="replace").strip(), secrets)
     if allow_existing and "already exists" in stderr.lower():
         return
+    if allow_force_if_needed and _should_force_retry(stderr):
+        force_command = [
+            "git",
+            "-C",
+            repo_path,
+            "push",
+            "--force-with-lease="
+            + _build_force_with_lease(target_branch, expected_remote_sha),
+            remote_url,
+            f"refs/heads/{source_branch}:refs/heads/{target_branch}",
+        ]
+        force_proc = subprocess.run(force_command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if force_proc.returncode == 0:
+            return
+        stderr = _sanitize_text(force_proc.stderr.decode("utf-8", errors="replace").strip(), secrets)
     raise SystemExit(stderr)
 
 
@@ -392,6 +405,27 @@ def _normalize_sha(value: Optional[str]) -> Optional[str]:
     return value.strip().lower() or None
 
 
+def _build_force_with_lease(target_branch: str, expected_remote_sha: Optional[str]) -> str:
+    target_ref = f"refs/heads/{target_branch}"
+    normalized_sha = _normalize_sha(expected_remote_sha)
+    if normalized_sha:
+        return f"{target_ref}:{normalized_sha}"
+    return target_ref
+
+
+def _should_force_retry(stderr: str) -> bool:
+    lowered = stderr.lower()
+    patterns = (
+        "non-fast-forward",
+        "[rejected]",
+        "fetch first",
+        "failed to update ref",
+        "cannot lock ref",
+        "stale info",
+    )
+    return any(pattern in lowered for pattern in patterns)
+
+
 def _set_default_branch(base_url: str, token: str, project_id: int, branch: str, current: Optional[str]) -> bool:
     if current == branch:
         return False
@@ -399,22 +433,35 @@ def _set_default_branch(base_url: str, token: str, project_id: int, branch: str,
     return True
 
 
-def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequence[str]) -> List[str]:
+def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequence[str], *, allow_force_push: bool) -> List[str]:
     existing = _gitlab_request("GET", base_url, f"/projects/{project_id}/protected_branches", token)
-    existing_names = {
-        item.get("name")
+    existing_map = {
+        str(item.get("name")): item
         for item in existing
-        if isinstance(existing, list) and isinstance(item, dict)
-    } if isinstance(existing, list) else set()
-    created: List[str] = []
+        if isinstance(existing, list) and isinstance(item, dict) and isinstance(item.get("name"), str)
+    } if isinstance(existing, list) else {}
+    changed: List[str] = []
     for branch in branches:
-        if branch in existing_names:
+        branch_entry = existing_map.get(branch)
+        encoded_branch = urllib.parse.quote(branch, safe="")
+        if branch_entry:
+            current_allow_force_push = bool(branch_entry.get("allow_force_push"))
+            if current_allow_force_push == allow_force_push:
+                continue
+            _gitlab_request(
+                "PATCH",
+                base_url,
+                f"/projects/{project_id}/protected_branches/{encoded_branch}?allow_force_push={'true' if allow_force_push else 'false'}",
+                token,
+            )
+            changed.append(branch)
             continue
         payload = {
             "name": branch,
             "push_access_level": 40,
             "merge_access_level": 40,
             "unprotect_access_level": 40,
+            "allow_force_push": allow_force_push,
         }
         try:
             _gitlab_request("POST", base_url, f"/projects/{project_id}/protected_branches", token, payload)
@@ -422,8 +469,8 @@ def _protect_branches(base_url: str, token: str, project_id: int, branches: Sequ
             if exc.status not in {409, 422}:
                 raise
         else:
-            created.append(branch)
-    return created
+            changed.append(branch)
+    return changed
 
 
 def _protect_tags(base_url: str, token: str, project_id: int, tags: Sequence[str]) -> List[str]:
@@ -559,6 +606,8 @@ def main() -> int:
                 remote_name="gitlab",
                 lfs_ref=source_branch,
                 secrets=secrets,
+                allow_force_if_needed=True,
+                expected_remote_sha=gl_sha,
             )
             if gl_sha is None:
                 results["created"].append(target_branch)
@@ -569,7 +618,13 @@ def main() -> int:
     if _set_default_branch(target.base_url, target.api_token, int(project_id), main_branch, current_default):
         results["updated"].append(f"default:{main_branch}")
 
-    protected = _protect_branches(target.base_url, target.api_token, int(project_id), tracked_targets)
+    protected = _protect_branches(
+        target.base_url,
+        target.api_token,
+        int(project_id),
+        tracked_targets,
+        allow_force_push=True,
+    )
     results["created"].extend([f"protected:{branch}" for branch in protected])
     protected_tags = _protect_tags(target.base_url, target.api_token, int(project_id), ["*"])
     results["created"].extend([f"protected-tag:{tag}" for tag in protected_tags])

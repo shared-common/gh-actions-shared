@@ -4,7 +4,7 @@
 
 ### “Missing required secret file env var”
 Ensure `bws-fetch` is running and the wrapper repo supplies
-`BWS_ACCESS_TOKEN` and `BWS_PROJECT_ID`.
+`BWS_PROJECT_ID` and `BWS_ACCESS_TOKEN`.
 
 ### “Event … is not allowed”
 Check `configs/event-allowlist.json` and confirm the wrapper workflow
