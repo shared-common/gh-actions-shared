@@ -13,6 +13,7 @@ Wrapper repos must:
 - Fork drift polling is initiated by the Worker cron (no polling repos).
 - Pass `event-context`, `event-name`, and `expected-event-action` inputs.
 - Require `inputs.dispatch_action` and `inputs.app_id` in workflow_dispatch wrappers.
+- Require `inputs.repo_full_name` for repo-mutation workflow_dispatch wrappers.
 - Pass `target-org` for org validation.
 - Provide BWS secrets via repo secrets (per‑org).
 

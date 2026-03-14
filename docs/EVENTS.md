@@ -10,6 +10,7 @@ The allowlist is defined in `configs/event-allowlist.json` and enforced by
 `workflow_dispatch` inputs must include:
 - `dispatch_action` (must match allowlist)
 - `app_id` (must match `GH_ORG_SHARED_APP_ID`)
+- `repo_full_name` for repo-mutation workflows (`orchestrator`, `repository`, `fork`, `polling`)
 
 > Fork drift polling is initiated by the Cloudflare Worker cron and dispatched to the
 > private wrapper repos via `workflow_dispatch`.

@@ -21,6 +21,9 @@ lives here**.
 4. Wrapper invokes shared workflow with event context + payload
 5. Shared workflow validates event, then performs the job
 
+Wrapper mutation workflows serialize by `repo_full_name` so a single repo cannot run
+overlapping `repository`/`fork`/`orchestrator`/`polling` sync jobs.
+
 ## Security boundaries
 - Secrets are fetched via BWS and written to `*_FILE` paths only.
 - Events are validated against allowlists and org mappings.

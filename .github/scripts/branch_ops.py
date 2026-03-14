@@ -40,6 +40,30 @@ def _coerce_branch(value: object, label: str) -> str:
     return value
 
 
+def _is_skippable_api_error(exc: ApiError) -> bool:
+    return 400 <= exc.status < 500
+
+
+def _update_branch_with_skip(
+    results: Dict[str, List[str]],
+    token: str,
+    owner: str,
+    repo: str,
+    branch: str,
+    sha: str,
+    *,
+    force: bool,
+) -> None:
+    try:
+        update_branch(token, owner, repo, branch, sha, force=force)
+        results["updated"].append(branch)
+    except ApiError as exc:
+        if _is_skippable_api_error(exc):
+            results["skipped"].append(branch)
+            return
+        raise
+
+
 def _resolve_upstream_ref(input_data: dict, org: str, repo: str, default_branch: str) -> tuple[str, str, str, bool]:
     if input_data.get("repo_is_fork") is True:
         parent_full = input_data.get("repo_parent_full_name")
@@ -127,14 +151,15 @@ def main() -> int:
             except SystemExit:
                 current_default = ""
             if current_default != upstream_sha:
-                try:
-                    update_branch(token, org, repo, repo_default_branch, upstream_sha, force=False)
-                    results["updated"].append(repo_default_branch)
-                except ApiError as exc:
-                    if exc.status in {403, 404, 422}:
-                        results["skipped"].append(repo_default_branch)
-                    else:
-                        raise
+                _update_branch_with_skip(
+                    results,
+                    token,
+                    org,
+                    repo,
+                    repo_default_branch,
+                    upstream_sha,
+                    force=True,
+                )
         for spec in policy.order:
             if not spec.update:
                 continue
@@ -145,8 +170,15 @@ def main() -> int:
             except SystemExit:
                 current = ""
             if current != desired_sha:
-                update_branch(token, org, repo, name, desired_sha, force=True)
-                results["updated"].append(name)
+                _update_branch_with_skip(
+                    results,
+                    token,
+                    org,
+                    repo,
+                    name,
+                    desired_sha,
+                    force=True,
+                )
 
     output_path = os.environ.get("OUTPUT_PATH")
     payload = {"repo": repo_full, "job_type": job_type, "results": results}
