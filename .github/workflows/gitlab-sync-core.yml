@@ -10,6 +10,9 @@ name: gitlab-sync-core
       target-org:
         required: true
         type: string
+      target-profile:
+        required: true
+        type: string
       shared-repo:
         required: true
         type: string
@@ -25,15 +28,7 @@ name: gitlab-sync-core
       bws-secrets:
         required: false
         type: string
-        default: >-
-          GH_ORG_UPSTREAM,GH_ORG_XF_MAIN,GH_ORG_XF_SECOPS,GH_ORG_XF_CHECKOUT,
-          GL_BASE_URL,GL_GROUP_TOP_UPSTREAM,GL_GROUP_SUB_CANONICAL,
-          GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_MAIN,GL_GROUP_SUB_XF_SECOPS,
-          GL_GROUP_SUB_XF_CHECKOUT,GL_BRIDGE_FORK_USER_DERIVED,
-          GL_PAT_FORK_DERIVED_SVC,GL_BRIDGE_FORK_USER_SEEDBED,
-          GL_PAT_FORK_SEEDBED_SVC,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,
-          GIT_BRANCH_STAGING,GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,
-          GIT_BRANCH_FEATURE
+        default: ""
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
@@ -99,6 +94,40 @@ jobs:
         with:
           python-version: "3.14.2"
 
+      - name: Resolve BWS secrets
+        id: resolve_bws
+        shell: bash
+        env:
+          TARGET_PROFILE: ${{ inputs.target-profile }}
+          BWS_SECRETS_OVERRIDE: ${{ inputs.bws-secrets }}
+        run: |
+          set -euo pipefail
+          override_clean="$(printf '%s' "${BWS_SECRETS_OVERRIDE}" | tr -d '[:space:]')"
+          if [ -n "${override_clean}" ]; then
+            printf 'secrets=%s\n' "${override_clean}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          common="GL_BASE_URL,GIT_BRANCH_PREFIX,GIT_BRANCH_MAIN,GIT_BRANCH_STAGING,GIT_BRANCH_RELEASE,GIT_BRANCH_SNAPSHOT,GIT_BRANCH_FEATURE"
+          case "${TARGET_PROFILE}" in
+            upstream)
+              specific="GL_GROUP_TOP_UPSTREAM,GL_GROUP_SUB_CANONICAL,GL_BRIDGE_FORK_USER_SEEDBED,GL_PAT_FORK_SEEDBED_SVC"
+              ;;
+            xf-main)
+              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_MAIN,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
+              ;;
+            xf-secops)
+              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_SECOPS,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
+              ;;
+            xf-checkout)
+              specific="GL_GROUP_TOP_DIVERGE,GL_GROUP_SUB_XF_CHECKOUT,GL_BRIDGE_FORK_USER_DERIVED,GL_PAT_FORK_DERIVED_SVC"
+              ;;
+            *)
+              printf '%s\n' "Unsupported target-profile: ${TARGET_PROFILE}" >&2
+              exit 1
+              ;;
+          esac
+          printf 'secrets=%s,%s\n' "${common}" "${specific}" >> "$GITHUB_OUTPUT"
+
       - name: Fetch secrets from BWS
         uses: ./shared/.github/actions/bws-fetch
         with:
@@ -106,7 +135,7 @@ jobs:
           project-id: ${{ secrets.BWS_PROJECT_ID }}
           bws-version: ${{ inputs.bws-version }}
           bws-sha256: ${{ inputs.bws-sha256 }}
-          secrets: ${{ inputs.bws-secrets }}
+          secrets: ${{ steps.resolve_bws.outputs.secrets }}
           output-dir: shared/.secrets
 
       - name: Write validated payload
@@ -136,10 +165,7 @@ jobs:
           INPUT_PATH: validated.json
           OUTPUT_PATH: summary.json
           TARGET_ORG: ${{ inputs.target-org }}
-          GH_ORG_UPSTREAM_FILE: ${{ env.GH_ORG_UPSTREAM_FILE }}
-          GH_ORG_XF_MAIN_FILE: ${{ env.GH_ORG_XF_MAIN_FILE }}
-          GH_ORG_XF_SECOPS_FILE: ${{ env.GH_ORG_XF_SECOPS_FILE }}
-          GH_ORG_XF_CHECKOUT_FILE: ${{ env.GH_ORG_XF_CHECKOUT_FILE }}
+          TARGET_PROFILE: ${{ inputs.target-profile }}
           GH_INSTALL_TOKEN_FILE: ${{ env.GH_INSTALL_TOKEN_FILE }}
           GL_BASE_URL_FILE: ${{ env.GL_BASE_URL_FILE }}
           GL_GROUP_TOP_UPSTREAM_FILE: ${{ env.GL_GROUP_TOP_UPSTREAM_FILE }}

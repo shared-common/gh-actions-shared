@@ -65,30 +65,25 @@ def select_sync_sources(input_data: dict, tracked_sources: Sequence[str]) -> Lis
     return unique_sources
 
 
-def resolve_gitlab_target(org: str, repo_name: str) -> GitlabTarget:
-    gh_org_upstream = require_secret("GH_ORG_UPSTREAM")
-    gh_org_xf_main = require_secret("GH_ORG_XF_MAIN")
-    gh_org_xf_secops = require_secret("GH_ORG_XF_SECOPS")
-    gh_org_xf_checkout = require_secret("GH_ORG_XF_CHECKOUT")
-
-    if org == gh_org_upstream:
+def resolve_gitlab_target(target_profile: str, repo_name: str) -> GitlabTarget:
+    if target_profile == "upstream":
         group_path = f"{require_secret('GL_GROUP_TOP_UPSTREAM')}/{require_secret('GL_GROUP_SUB_CANONICAL')}"
         git_username = require_secret("GL_BRIDGE_FORK_USER_SEEDBED")
         api_token = require_secret("GL_PAT_FORK_SEEDBED_SVC")
-    elif org == gh_org_xf_main:
+    elif target_profile == "xf-main":
         group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_MAIN')}"
         git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
         api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
-    elif org == gh_org_xf_secops:
+    elif target_profile == "xf-secops":
         group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_SECOPS')}"
         git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
         api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
-    elif org == gh_org_xf_checkout:
+    elif target_profile == "xf-checkout":
         group_path = f"{require_secret('GL_GROUP_TOP_DIVERGE')}/{require_secret('GL_GROUP_SUB_XF_CHECKOUT')}"
         git_username = require_secret("GL_BRIDGE_FORK_USER_DERIVED")
         api_token = require_secret("GL_PAT_FORK_DERIVED_SVC")
     else:
-        raise SystemExit(f"Unsupported target org for GitLab sync: {org}")
+        raise SystemExit(f"Unsupported target profile for GitLab sync: {target_profile}")
 
     return GitlabTarget(
         project_path=f"{group_path}/{repo_name}",
@@ -515,7 +510,10 @@ def main() -> int:
         raise SystemExit("Missing TARGET_ORG")
     if target_org != org:
         raise SystemExit("TARGET_ORG does not match repo_full_name")
-    target = resolve_gitlab_target(target_org, repo_name)
+    target_profile = os.environ.get("TARGET_PROFILE", "").strip()
+    if not target_profile:
+        raise SystemExit("Missing TARGET_PROFILE")
+    target = resolve_gitlab_target(target_profile, repo_name)
     project, project_created = ensure_gitlab_project(target)
     project_id = project.get("id") if isinstance(project, dict) else None
     if not project_id:

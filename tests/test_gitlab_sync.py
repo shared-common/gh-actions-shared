@@ -47,12 +47,8 @@ class GitlabSyncTests(unittest.TestCase):
         )
         self.assertEqual(selected, ["mcr/main", "mcr/staging"])
 
-    def test_resolve_gitlab_target_maps_upstream_org(self):
+    def test_resolve_gitlab_target_maps_upstream_profile(self):
         values = {
-            "GH_ORG_UPSTREAM": "upstream-org",
-            "GH_ORG_XF_MAIN": "xf-main",
-            "GH_ORG_XF_SECOPS": "xf-secops",
-            "GH_ORG_XF_CHECKOUT": "xf-checkout",
             "GL_GROUP_TOP_UPSTREAM": "seedbed",
             "GL_GROUP_SUB_CANONICAL": "canonical",
             "GL_BRIDGE_FORK_USER_SEEDBED": "seedbed-user",
@@ -60,17 +56,13 @@ class GitlabSyncTests(unittest.TestCase):
             "GL_BASE_URL": "https://gitlab.example",
         }
         with mock.patch.object(gitlab_sync, "require_secret", side_effect=lambda name: values[name]):
-            target = gitlab_sync.resolve_gitlab_target("upstream-org", "demo")
+            target = gitlab_sync.resolve_gitlab_target("upstream", "demo")
         self.assertEqual(target.project_path, "seedbed/canonical/demo")
         self.assertEqual(target.git_username, "seedbed-user")
         self.assertEqual(target.api_token, "seedbed-token")
 
-    def test_resolve_gitlab_target_maps_derived_org(self):
+    def test_resolve_gitlab_target_maps_derived_profile(self):
         values = {
-            "GH_ORG_UPSTREAM": "upstream-org",
-            "GH_ORG_XF_MAIN": "xf-main",
-            "GH_ORG_XF_SECOPS": "xf-secops",
-            "GH_ORG_XF_CHECKOUT": "xf-checkout",
             "GL_GROUP_TOP_DIVERGE": "derived",
             "GL_GROUP_SUB_XF_SECOPS": "secops",
             "GL_BRIDGE_FORK_USER_DERIVED": "derived-user",
