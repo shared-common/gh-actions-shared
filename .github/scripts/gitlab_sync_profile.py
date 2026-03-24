@@ -39,6 +39,13 @@ PROFILE_CONFIG: dict[str, GitlabProfileConfig] = {
         group_top_secret="GL_GROUP_TOP_UPSTREAM",
         group_sub_secret="GL_GROUP_SUB_CANONICAL",
     ),
+    "xf-qubit": GitlabProfileConfig(
+        profile="xf-qubit",
+        git_username_secret="GL_BRIDGE_FORK_USER_ALEMBIC",
+        api_token_secret="GL_PAT_FORK_ALEMBIC_SVC",
+        group_top_secret="GL_GROUP_TOP_ALEMBIC",
+        group_sub_secret="GL_GROUP_SUB_XF_QUBIT",
+    ),
     "xf-main": GitlabProfileConfig(
         profile="xf-main",
         git_username_secret="GL_BRIDGE_FORK_USER_DERIVED",

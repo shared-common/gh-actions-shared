@@ -80,6 +80,23 @@ class GitlabSyncTests(unittest.TestCase):
 
     def test_required_bws_secrets_are_profile_scoped(self):
         self.assertEqual(
+            gitlab_sync_profile.required_bws_secrets("xf-qubit", mode="sync"),
+            (
+                "GL_BASE_URL",
+                "GL_MAPPING_JSON",
+                "GIT_BRANCH_PREFIX",
+                "GIT_BRANCH_MAIN",
+                "GIT_BRANCH_STAGING",
+                "GIT_BRANCH_RELEASE",
+                "GIT_BRANCH_SNAPSHOT",
+                "GIT_BRANCH_FEATURE",
+                "GL_GROUP_TOP_ALEMBIC",
+                "GL_GROUP_SUB_XF_QUBIT",
+                "GL_BRIDGE_FORK_USER_ALEMBIC",
+                "GL_PAT_FORK_ALEMBIC_SVC",
+            ),
+        )
+        self.assertEqual(
             gitlab_sync_profile.required_bws_secrets("xf-main", mode="sync"),
             (
                 "GL_BASE_URL",
@@ -146,6 +163,26 @@ class GitlabSyncTests(unittest.TestCase):
             "derived/secops",
         )
 
+    def test_resolve_profile_group_path_supports_qubit(self):
+        values = {
+            "GL_GROUP_TOP_ALEMBIC": "alembic",
+            "GL_GROUP_SUB_XF_QUBIT": "gh-xf-qubit",
+        }
+        self.assertEqual(
+            gitlab_sync_profile.resolve_profile_group_path("xf-qubit", lambda name: values[name]),
+            "alembic/gh-xf-qubit",
+        )
+
+    def test_resolve_profile_values_supports_qubit(self):
+        values = {
+            "GL_BRIDGE_FORK_USER_ALEMBIC": "alembic-user",
+            "GL_PAT_FORK_ALEMBIC_SVC": "alembic-token",
+        }
+        self.assertEqual(
+            gitlab_sync_profile.resolve_profile_values("xf-qubit", lambda name: values[name]),
+            ("alembic-user", "alembic-token"),
+        )
+
     def test_org_sync_group_path_prefers_mapping_alias_key(self):
         mapping = '{"GH_ORG_XF_CHECKOUT":"derived/gh-xf-checkout"}'
         with mock.patch.dict("os.environ", {"GL_MAPPING_JSON_FILE": "/tmp/mapping"}, clear=False):
@@ -153,6 +190,15 @@ class GitlabSyncTests(unittest.TestCase):
                 self.assertEqual(
                     gitlab_org_sync._resolve_gitlab_group_path("xf-checkout", "xf-checkout"),
                     "derived/gh-xf-checkout",
+                )
+
+    def test_org_sync_group_path_prefers_qubit_alias_key(self):
+        mapping = '{"GH_ORG_XF_QUBIT":"alembic/gh-xf-qubit"}'
+        with mock.patch.dict("os.environ", {"GL_MAPPING_JSON_FILE": "/tmp/mapping"}, clear=False):
+            with mock.patch.object(gitlab_org_sync, "require_secret", side_effect=lambda name: mapping if name == "GL_MAPPING_JSON" else "unused"):
+                self.assertEqual(
+                    gitlab_org_sync._resolve_gitlab_group_path("xf-qubit", "xf-qubit"),
+                    "alembic/gh-xf-qubit",
                 )
 
     def test_require_gitlab_group_path_requires_nested_path(self):

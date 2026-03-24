@@ -13,6 +13,7 @@ from repo_filters import apply_filters
 
 PROFILE_MAPPING_KEYS = {
     "upstream": "GH_ORG_UPSTREAM",
+    "xf-qubit": "GH_ORG_XF_QUBIT",
     "xf-main": "GH_ORG_XF_MAIN",
     "xf-secops": "GH_ORG_XF_SECOPS",
     "xf-checkout": "GH_ORG_XF_CHECKOUT",
